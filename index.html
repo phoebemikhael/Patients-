@@ -1,0 +1,1437 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0369a1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Patients">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Patient & Culture Management System</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+<script>
+tailwind.config = { theme: { extend: { fontFamily: { inter: ['Inter','sans-serif'] },
+  colors: { medical: { 50:'#f0f9ff',100:'#e0f2fe',200:'#bae6fd',500:'#0284c7',600:'#0369a1',700:'#075985',800:'#0c4a6e' } } } } }
+</script>
+<style>
+  body { font-family: 'Inter', sans-serif; background:#f8fafc; }
+  .modal { display:none; }
+  @media print {
+    body { background:#fff !important; color:#000 !important; }
+    body > *:not(#reportModal) { display:none !important; }
+    #reportModal { display:block !important; position:static !important; background:none !important; padding:0 !important; backdrop-filter:none !important; }
+    #reportModal .modal-box { box-shadow:none !important; max-height:none !important; overflow:visible !important; max-width:none !important; border-radius:0 !important; }
+    .no-print { display:none !important; }
+    .rep-block { break-inside:avoid; }
+  }
+</style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+<header class="bg-gradient-to-r from-medical-800 to-medical-600 text-white shadow-lg sticky top-0 z-40">
+  <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center gap-2">
+    <div class="flex items-center gap-3">
+      <div class="bg-white/20 p-2.5 rounded-xl"><i class="fa-solid fa-hospital-user text-2xl"></i></div>
+      <div>
+        <h1 class="text-lg font-bold leading-tight">Patient Records Management</h1>
+        <p class="text-xs text-medical-100 opacity-90">Cultures, resistance patterns & antibiotic plans</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button onclick="exportData()" title="Download a backup" class="bg-white/15 hover:bg-white/25 px-3 py-2 rounded-xl text-xs font-semibold"><i class="fa-solid fa-download"></i><span class="hidden md:inline ml-1">Backup</span></button>
+      <button onclick="openClusters()" title="Possible transmission: same germ, same unit" class="bg-white/15 hover:bg-white/25 px-3 py-2 rounded-xl text-xs font-semibold"><i class="fa-solid fa-diagram-project"></i><span class="hidden md:inline ml-1">Clusters</span><span id="clusterBadge" class="hidden ml-1.5 bg-red-500 text-white rounded-full px-1.5 py-0.5 text-[10px] leading-none"></span></button>
+      <button onclick="exportXLSX()" title="Download an Excel file (several tabs)" class="bg-white/15 hover:bg-white/25 px-3 py-2 rounded-xl text-xs font-semibold"><i class="fa-solid fa-file-excel"></i><span class="hidden md:inline ml-1">Excel</span></button>
+      <button onclick="document.getElementById('importFile').click()" title="Restore a backup" class="bg-white/15 hover:bg-white/25 px-3 py-2 rounded-xl text-xs font-semibold"><i class="fa-solid fa-upload"></i><span class="hidden md:inline ml-1">Restore</span></button>
+      <input type="file" id="importFile" accept="application/json" class="hidden" onchange="importData(event)">
+      <button onclick="openNewPatientModal()" class="bg-emerald-500 hover:bg-emerald-600 px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 shadow">
+        <i class="fa-solid fa-user-plus"></i><span class="hidden sm:inline">New Patient</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-4 py-6 flex-grow w-full">
+  <div id="backupBanner" class="hidden mb-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-3 text-sm flex flex-wrap items-center justify-between gap-2">
+    <span><i class="fa-solid fa-triangle-exclamation mr-2"></i><span id="backupBannerText"></span></span>
+    <button onclick="exportData()" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold">Backup now</button>
+  </div>
+  <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
+    <div class="relative w-full md:w-96">
+      <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><i class="fa-solid fa-magnifying-glass"></i></span>
+      <input id="searchInput" oninput="renderPatientsList()" placeholder="Search by name or medical record no...." class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-medical-500">
+    </div>
+    <div class="flex items-center gap-6 text-sm">
+      <div class="text-center"><span class="block text-xs text-slate-400">Total patients</span><span id="totalPatientsCount" class="font-bold text-lg">0</span></div>
+      <div class="h-8 w-px bg-slate-200"></div>
+      <div class="text-center"><span class="block text-xs text-slate-400">Total admissions</span><span id="totalAdmissionsCount" class="font-bold text-medical-600 text-lg">0</span></div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <div class="lg:col-span-4">
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+        <h2 class="text-base font-bold mb-3 flex justify-between"><span>Patients</span><span id="showingCount" class="text-xs font-normal text-slate-400">0</span></h2>
+        <div class="grid grid-cols-2 gap-2 mb-3">
+          <select id="filterStatus" onchange="renderPatientsList()" class="px-2 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none">
+            <option value="">All patients</option><option value="admitted">Currently admitted</option><option value="discharged">Discharged</option><option value="deceased">Deceased</option>
+          </select>
+          <select id="filterPattern" onchange="renderPatientsList()" class="px-2 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none">
+            <option value="">Any resistance</option><option>Pan-sensitive</option><option>ESBL</option><option>CRE / CRKP</option><option>CRAB</option><option>MRSA</option><option>VRE</option><option>MDR</option><option>XDR</option><option>PDR</option><option>Other</option>
+          </select>
+          <select id="filterUnit" onchange="renderPatientsList()" class="col-span-2 px-2 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none"><option value="">All units</option></select>
+        </div>
+        <div id="patientsList" class="space-y-2 lg:max-h-[75vh] lg:overflow-y-auto"></div>
+      </div>
+    </div>
+
+    <div id="profileHome" class="lg:col-span-8 space-y-6">
+      <div id="noPatientSelected" class="bg-white rounded-2xl shadow-sm border border-slate-100 p-12 text-center text-slate-400">
+        <i class="fa-solid fa-folder-open text-6xl text-slate-200 mb-4"></i>
+        <h3 class="text-lg font-semibold text-slate-600">No patient selected</h3>
+        <p class="text-sm mt-1">Choose a patient from the list, or add a new one to get started.</p>
+      </div>
+
+      <div id="patientProfileCard" class="hidden space-y-6">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 relative overflow-hidden">
+          <div class="absolute top-0 left-0 w-2 h-full bg-medical-600"></div>
+          <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pl-2">
+            <div>
+              <div class="flex items-center gap-3 flex-wrap">
+                <h2 id="viewPatientName" class="text-2xl font-bold">---</h2>
+                <span id="viewPatientId" class="bg-medical-50 text-medical-700 text-xs font-semibold px-2.5 py-1 rounded-md border border-medical-200">MRN: ---</span>
+                <span id="viewPatientAge" class="hidden bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 py-1 rounded-md border border-slate-200"></span>
+              </div>
+              <p class="text-sm text-slate-500 mt-1"><i class="fa-solid fa-notes-medical text-medical-500 mr-1"></i>Medical history: <strong id="viewPatientHistory" class="text-slate-700 font-normal">---</strong></p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button id="btnNewAdmission" onclick="openNewAdmissionModal()" class="bg-medical-600 hover:bg-medical-700 text-white px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5"><i class="fa-solid fa-bed"></i><span>New admission</span></button>
+              <button onclick="openReport()" class="bg-slate-800 hover:bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5"><i class="fa-solid fa-file-medical"></i>Print report</button>
+              <button onclick="openEditPatientModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5"><i class="fa-solid fa-pen"></i>Edit</button>
+              <button onclick="deletePatient()" class="bg-red-50 hover:bg-red-100 text-red-600 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>
+        </div>
+
+        <h3 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left text-medical-600"></i>Admissions history</h3>
+        <div id="admissionsContainer" class="space-y-6"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer class="bg-white border-t border-slate-200 mt-12 py-4 text-center text-xs text-slate-400">
+  Patient, culture & antibiotic tracking — data is stored locally in this browser only. Use Backup regularly.
+</footer>
+
+<!-- Modal: Patient (new / edit) -->
+<div id="modalPatient" class="modal fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+    <div class="bg-medical-700 px-6 py-4 text-white flex justify-between items-center">
+      <h3 id="patientModalTitle" class="font-bold text-lg">Register new patient</h3>
+      <button onclick="closeModal('modalPatient')" class="text-xl">&times;</button>
+    </div>
+    <form onsubmit="savePatient(event)" class="p-6 space-y-4">
+      <input type="hidden" id="editingPatientKey">
+      <div><label class="block text-xs font-bold mb-1">Patient name *</label>
+        <input id="inputPatientName" required placeholder="e.g. Ahmed Mohamed Ali" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"></div>
+      <div><label class="block text-xs font-bold mb-1">Medical record number (MRN) *</label>
+        <input id="inputPatientId" required placeholder="e.g. 10293" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"></div>
+      <div><label class="block text-xs font-bold mb-1">Date of birth</label>
+        <input type="date" id="inputPatientDob" oninput="updateDobPreview()" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none">
+        <p id="dobAgePreview" class="text-[11px] text-slate-400 mt-1"></p></div>
+      <div><label class="block text-xs font-bold mb-1">Medical history & chronic conditions</label>
+        <textarea id="inputPatientHistory" rows="3" placeholder="e.g. Hypertension, diabetes, penicillin allergy..." class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"></textarea></div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" onclick="closeModal('modalPatient')" class="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600">Cancel</button>
+        <button class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: New admission -->
+<div id="modalNewAdmission" class="modal fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+    <div class="bg-medical-700 px-6 py-4 text-white flex justify-between items-center">
+      <h3 id="admissionModalTitle" class="font-bold text-lg">New hospital admission</h3>
+      <button onclick="closeModal('modalNewAdmission')" class="text-xl">&times;</button>
+    </div>
+    <form onsubmit="saveNewAdmission(event)" class="p-6 space-y-4">
+      <input type="hidden" id="editingAdmissionId">
+      <div><label class="block text-xs font-bold mb-1">Admission date *</label>
+        <input type="date" id="inputAdmissionDate" required class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-xs font-bold mb-1">Outcome</label>
+          <select id="inputAdmissionOutcome" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-medical-500 focus:outline-none"><option>Discharged</option><option>Deceased</option></select></div>
+        <div><label class="block text-xs font-bold mb-1">Discharge / death date</label>
+          <input type="date" id="inputAdmissionDischarge" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"></div>
+      </div>
+      <p class="text-[11px] text-slate-400 -mt-2">Leave the date empty if the patient is still admitted.</p>
+      <div><label class="block text-xs font-bold mb-1">Diagnosis / disease name *</label>
+        <input id="inputAdmissionDiagnosis" required placeholder="e.g. Ventilator-associated pneumonia" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"></div>
+      <div><label class="block text-xs font-bold mb-1">Reason for admission *</label>
+        <textarea id="inputAdmissionReason" required rows="3" placeholder="e.g. Fever, respiratory distress..." class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"></textarea></div>
+      <div><label class="block text-xs font-bold mb-1">Place / unit (where the patient is lying)</label>
+        <input id="inputAdmissionDept" list="placeList" placeholder="e.g. ICU B" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"></div>
+      <div><label class="block text-xs font-bold mb-1">Service / specialty (optional, not used for transmission)</label>
+        <input id="inputAdmissionService" placeholder="e.g. Neurosurgery" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"></div>
+      <datalist id="placeList"></datalist>
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" onclick="closeModal('modalNewAdmission')" class="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600">Cancel</button>
+        <button id="btnSaveAdmission" class="px-5 py-2 bg-medical-600 hover:bg-medical-700 text-white rounded-xl text-xs font-semibold">Add admission</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: New culture -->
+<div id="modalNewCulture" class="modal fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 items-center justify-center p-4 overflow-y-auto">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden my-4">
+    <div class="bg-amber-600 px-6 py-4 text-white flex justify-between items-center">
+      <h3 class="font-bold text-lg"><i class="fa-solid fa-vial mr-2"></i><span id="cultureModalTitle">Add culture result</span></h3>
+      <button onclick="closeModal('modalNewCulture')" class="text-xl">&times;</button>
+    </div>
+    <form onsubmit="saveNewCulture(event)" class="p-6 space-y-4">
+      <input type="hidden" id="targetAdmissionIdForCulture"><input type="hidden" id="editingCultureId">
+      <div><label class="block text-xs font-bold mb-1">Date drawn *</label>
+        <input type="date" id="inputCultureDrawn" required class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none"></div>
+      <div><label class="block text-xs font-bold mb-1">Specimen</label>
+        <select id="inputCultureSpecimen" onchange="document.getElementById('inputCultureSpecimenOther').classList.toggle('hidden', this.value !== 'Other')" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none">
+          <option>Blood</option><option>Urine</option><option>Sputum</option><option>Endotracheal aspirate</option><option>Wound swab</option><option>CSF</option><option>Catheter tip</option><option>Stool</option><option>Other</option>
+        </select>
+        <input id="inputCultureSpecimenOther" class="hidden mt-2 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none" placeholder="Type where the sample was taken from (e.g. Pleural fluid)"></div>
+      <div>
+        <div class="flex justify-between items-center mb-1">
+          <label class="block text-xs font-bold">Organism(s) *</label>
+          <button type="button" onclick="addOrgRow()" class="text-xs bg-amber-50 hover:bg-amber-100 text-amber-700 px-2.5 py-1 rounded-lg font-semibold">+ Add another organism</button>
+        </div>
+        <div id="cultureOrgRows" class="space-y-3"></div>
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" onclick="closeModal('modalNewCulture')" class="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600">Cancel</button>
+        <button class="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold">Save culture</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: New antibiotic regimen -->
+<div id="modalNewAbx" class="modal fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 items-center justify-center p-4 overflow-y-auto">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden my-4">
+    <div class="bg-blue-600 px-6 py-4 text-white flex justify-between items-center">
+      <h3 class="font-bold text-lg"><i class="fa-solid fa-pills mr-2"></i><span id="abxModalTitle">Add antibiotic / combination</span></h3>
+      <button onclick="closeModal('modalNewAbx')" class="text-xl">&times;</button>
+    </div>
+    <form onsubmit="saveNewAbx(event)" class="p-6 space-y-4">
+      <input type="hidden" id="targetAdmissionIdForAbx"><input type="hidden" id="editingAbxId">
+      <div>
+        <div class="flex justify-between items-center mb-1">
+          <label class="block text-xs font-bold">Drug(s) *</label>
+          <button type="button" onclick="addDrugRow()" class="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-2.5 py-1 rounded-lg font-semibold">+ Add drug to combination</button>
+        </div>
+        <div id="abxDrugRows" class="space-y-2"></div>
+        <p class="text-[11px] text-slate-400 mt-1">Add more than one drug if given as a combination (e.g. Meropenem + Colistin).</p>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="block text-xs font-bold mb-1">Start date *</label>
+          <input type="date" id="inputAbxStart" required class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></div>
+        <div><label class="block text-xs font-bold mb-1">Stop date</label>
+          <input type="date" id="inputAbxStop" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></div>
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" onclick="closeModal('modalNewAbx')" class="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600">Cancel</button>
+        <button class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Discharge date -->
+<div id="modalDischarge" class="modal fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+    <div class="bg-emerald-600 px-6 py-4 text-white flex justify-between items-center">
+      <h3 class="font-bold text-lg"><i class="fa-solid fa-person-walking-arrow-right mr-2"></i>Discharge / outcome</h3>
+      <button onclick="closeModal('modalDischarge')" class="text-xl">&times;</button>
+    </div>
+    <form onsubmit="saveDischarge(event)" class="p-6 space-y-4">
+      <input type="hidden" id="targetAdmissionIdForDischarge">
+      <div><label class="block text-xs font-bold mb-1">Outcome</label>
+        <select id="inputDischargeOutcome" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"><option>Discharged</option><option>Deceased</option></select></div>
+      <div><label class="block text-xs font-bold mb-1">Date</label>
+        <input type="date" id="inputDischargeDate" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+        <p class="text-[11px] text-slate-400 mt-1">Clear the date to mark the patient as still admitted.</p></div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" onclick="closeModal('modalDischarge')" class="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600">Cancel</button>
+        <button class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Line / device -->
+<div id="modalLine" class="modal fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+    <div class="bg-violet-600 px-6 py-4 text-white flex justify-between items-center">
+      <h3 class="font-bold text-lg"><i class="fa-solid fa-syringe mr-2"></i><span id="lineModalTitle">Add line / device</span></h3>
+      <button onclick="closeModal('modalLine')" class="text-xl">&times;</button>
+    </div>
+    <form onsubmit="saveLine(event)" class="p-6 space-y-4">
+      <input type="hidden" id="targetAdmissionIdForLine"><input type="hidden" id="editingLineId">
+      <div><label class="block text-xs font-bold mb-1">Line / device *</label>
+        <select id="inputLineType" required onchange="document.getElementById('inputLineOther').classList.toggle('hidden', this.value !== 'Other')" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-violet-500 focus:outline-none">
+          <option value="">— Select —</option>
+          <option>Central venous catheter (CVC)</option><option>PICC line</option><option>Dialysis catheter</option><option>Arterial line</option>
+          <option>Peripheral IV cannula</option><option>Urinary catheter (Foley)</option><option>Endotracheal tube / Mechanical ventilation</option>
+          <option>Tracheostomy</option><option>Nasogastric tube</option><option>Chest tube</option><option>Surgical drain</option><option>EVD / ventricular drain</option><option>Other</option>
+        </select>
+        <input id="inputLineOther" class="hidden mt-2 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 focus:outline-none" placeholder="Type the line / device name"></div>
+      <div><label class="block text-xs font-bold mb-1">Site</label>
+        <input id="inputLineSite" placeholder="e.g. Right internal jugular" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 focus:outline-none"></div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="block text-xs font-bold mb-1">Insertion date *</label>
+          <input type="date" id="inputLineInserted" required class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 focus:outline-none"></div>
+        <div><label class="block text-xs font-bold mb-1">Removal date</label>
+          <input type="date" id="inputLineRemoved" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 focus:outline-none"></div>
+      </div>
+      <p class="text-[11px] text-slate-400 -mt-2">Leave the removal date empty if the line is still in place.</p>
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" onclick="closeModal('modalLine')" class="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600">Cancel</button>
+        <button class="px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-xs font-semibold">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Operation / procedure -->
+<div id="modalOperation" class="modal fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+    <div class="bg-rose-600 px-6 py-4 text-white flex justify-between items-center">
+      <h3 class="font-bold text-lg"><i class="fa-solid fa-user-doctor mr-2"></i><span id="opModalTitle">Add operation / procedure</span></h3>
+      <button onclick="closeModal('modalOperation')" class="text-xl">&times;</button>
+    </div>
+    <form onsubmit="saveOperation(event)" class="p-6 space-y-4">
+      <input type="hidden" id="targetAdmissionIdForOp"><input type="hidden" id="editingOpId">
+      <div><label class="block text-xs font-bold mb-1">Date *</label>
+        <input type="date" id="inputOpDate" required class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-rose-500 focus:outline-none"></div>
+      <div><label class="block text-xs font-bold mb-1">Operation / procedure *</label>
+        <input id="inputOpName" required placeholder="e.g. Exploratory laparotomy, Tracheostomy" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-rose-500 focus:outline-none"></div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" onclick="closeModal('modalOperation')" class="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600">Cancel</button>
+        <button class="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold">Save operation</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Transfer between departments -->
+<div id="modalTransfer" class="modal fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+    <div class="bg-teal-600 px-6 py-4 text-white flex justify-between items-center">
+      <h3 class="font-bold text-lg"><i class="fa-solid fa-right-left mr-2"></i><span id="transferModalTitle">Transfer to another department</span></h3>
+      <button onclick="closeModal('modalTransfer')" class="text-xl">&times;</button>
+    </div>
+    <form onsubmit="saveTransfer(event)" class="p-6 space-y-4">
+      <input type="hidden" id="targetAdmissionIdForTransfer"><input type="hidden" id="editingTransferId">
+      <p id="transferFromText" class="text-xs text-slate-500"></p>
+      <div><label class="block text-xs font-bold mb-1">Transfer date *</label>
+        <input type="date" id="inputTransferDate" required class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 focus:outline-none"></div>
+      <div><label class="block text-xs font-bold mb-1">Transferred to (place / unit) *</label>
+        <input id="inputTransferDept" required list="placeList" placeholder="e.g. ICU A" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 focus:outline-none"></div>
+      <div><label class="block text-xs font-bold mb-1">Service / specialty (optional)</label>
+        <input id="inputTransferService" placeholder="e.g. General surgery" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 focus:outline-none"></div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" onclick="closeModal('modalTransfer')" class="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600">Cancel</button>
+        <button class="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-semibold">Save transfer</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Possible transmission (clusters) -->
+<div id="modalClusters" class="modal fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 items-start justify-center p-4 overflow-y-auto">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-4 overflow-hidden">
+    <div class="bg-rose-700 px-6 py-4 text-white flex justify-between items-center">
+      <h3 class="font-bold text-lg"><i class="fa-solid fa-diagram-project mr-2"></i>Possible transmission</h3>
+      <button onclick="closeModal('modalClusters')" class="text-xl">&times;</button>
+    </div>
+    <div class="p-5 space-y-4">
+      <p class="text-xs text-slate-500">Patients who grew the <strong>same organism</strong> while in the <strong>same unit</strong> within a few days of each other. The unit is where each patient was on the day the culture was drawn. This only points to a possible link and needs infection-control review to confirm.</p>
+      <div class="flex flex-wrap items-center gap-4 text-xs">
+        <label class="flex items-center gap-2">Within
+          <select id="clusterWindow" onchange="renderClusters()" class="px-2 py-1.5 border border-slate-200 rounded-lg bg-white"><option value="7">7 days</option><option value="14" selected>14 days</option><option value="30">30 days</option><option value="90">90 days</option><option value="36500">Any date</option></select></label>
+        <label class="flex items-center gap-2">Place =
+          <select id="clusterMode" onchange="renderClusters()" class="px-2 py-1.5 border border-slate-200 rounded-lg bg-white"><option value="at">where the patient was when the culture was drawn</option><option value="now">where the patient is now</option></select></label>
+        <label class="flex items-center gap-2">Unit
+          <select id="clusterUnit" onchange="renderClusters()" class="px-2 py-1.5 border border-slate-200 rounded-lg bg-white"><option value="">All units</option></select></label>
+        <label class="flex items-center gap-2">Month
+          <input type="month" id="clusterMonth" onchange="clusterPickMonth()" class="px-2 py-1.5 border border-slate-200 rounded-lg bg-white"></label>
+        <label class="flex items-center gap-2">From
+          <input type="date" id="clusterFrom" onchange="clusterRangeChanged()" class="px-2 py-1.5 border border-slate-200 rounded-lg bg-white"></label>
+        <label class="flex items-center gap-2">To
+          <input type="date" id="clusterTo" onchange="clusterRangeChanged()" class="px-2 py-1.5 border border-slate-200 rounded-lg bg-white"></label>
+        <button type="button" onclick="clusterClearRange()" class="px-2 py-1.5 border border-slate-200 rounded-lg text-slate-600">All dates</button>
+        <label class="flex items-center gap-2"><input type="checkbox" id="clusterSamePattern" onchange="renderClusters()"> Same resistance pattern only</label>
+      </div>
+      <div id="clusterResults" class="space-y-3"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Report preview / print -->
+<div id="reportModal" class="modal fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 items-start justify-center p-4 overflow-y-auto">
+  <div class="modal-box bg-white rounded-2xl shadow-xl w-full max-w-3xl my-4">
+    <div class="no-print sticky top-0 bg-white border-b border-slate-200 px-5 py-3 flex justify-between items-center rounded-t-2xl">
+      <h3 class="font-bold text-slate-700"><i class="fa-solid fa-file-medical mr-2 text-medical-600"></i>Report preview</h3>
+      <div class="flex gap-2 items-center">
+        <select id="reportScope" onchange="renderReport()" class="px-2 py-2 border border-slate-200 rounded-xl text-xs bg-white"></select>
+        <button onclick="window.print()" class="bg-medical-600 hover:bg-medical-700 text-white px-4 py-2 rounded-xl text-xs font-semibold"><i class="fa-solid fa-print mr-1"></i>Print / Save as PDF</button>
+        <button onclick="closeModal('reportModal')" class="border border-slate-200 px-4 py-2 rounded-xl text-xs font-semibold text-slate-600">Close</button>
+      </div>
+    </div>
+    <div id="reportContent" class="p-8 text-sm text-slate-900"></div>
+  </div>
+</div>
+
+<script>
+const STORE = 'patients_db_v1';
+let patients = [];
+let selectedId = null;
+
+function load() { try { patients = JSON.parse(localStorage.getItem(STORE)) || []; } catch(e) { patients = []; } }
+function save() {
+  try { localStorage.setItem(STORE, JSON.stringify(patients)); localStorage.setItem('patients_dirty', '1'); }
+  catch(e) { alert('Could not save data in this browser.'); }
+  updateBackupBanner();
+}
+function updateBackupBanner() {
+  let dirty = false, last = null;
+  try { dirty = localStorage.getItem('patients_dirty') === '1'; last = localStorage.getItem('patients_last_backup'); } catch(e) {}
+  const el = document.getElementById('backupBanner'); if (!el) return;
+  el.classList.toggle('hidden', !(dirty && patients.length));
+  document.getElementById('backupBannerText').textContent =
+    'You have changes that are not backed up yet' + (last ? ` (last backup: ${new Date(last).toLocaleString('en-GB')})` : ' (no backup made yet)') + '.';
+}
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmt(d) { if (!d) return '—'; const [y,m,dd] = d.split('-'); return `${dd}/${m}/${y}`; }
+function cur() { return patients.find(p => p.id === selectedId); }
+function drugsOf(x) { return x.drugs || [{ name: x.name, dose: x.dose, route: x.route }]; }
+function regimenName(x) { return drugsOf(x).map(d => d.name).join(' + '); }
+
+function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+/* ---------- Backup ---------- */
+function markBackedUp() {
+  try { localStorage.setItem('patients_last_backup', new Date().toISOString()); localStorage.removeItem('patients_dirty'); } catch(e) {}
+  updateBackupBanner();
+}
+async function exportData() {
+  const name = 'patients-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  const blob = new Blob([JSON.stringify(patients, null, 2)], { type: 'application/json' });
+  // On phones, open the share sheet so the file can go straight to Drive / WhatsApp / email
+  try {
+    const file = new File([blob], name, { type: 'application/json' });
+    if (window.matchMedia('(pointer:coarse)').matches && navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Patient data backup' });
+      markBackedUp(); return;
+    }
+  } catch (err) { if (err && err.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  markBackedUp();
+}
+function exportCSV() {
+  const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const head = ['MRN', 'Patient name', 'Date of birth', 'Age', 'Medical history', 'Admission #', 'Admission date', 'Outcome', 'Discharge/death date', 'Diagnosis', 'Reason for admission', 'Departments', 'Operations', 'Lines / devices',
+    'Culture drawn', 'Specimen', 'Organism', 'Gram/type', 'Resistance pattern', 'Antibiotics'];
+  const rows = [head];
+  patients.forEach(p => p.admissions.forEach((a, i) => {
+    const base = [p.patientId, p.name, p.dob || '', ageOf(p.dob), p.history, i + 1, a.date, a.discharge ? outcomeWord(a) : 'Admitted', a.discharge || '', a.diagnosis, a.reason,
+      deptSteps(a).map(s => `${s.d} (${s.date})`).join(' > '), (a.operations || []).map(o => `${o.name} (${o.date})`).join('; '),
+      (a.lines || []).map(l => `${l.type}${l.site ? ' - ' + l.site : ''} (${l.inserted} to ${l.removed || 'in place'})`).join('; ')];
+    const abx = a.abx.map(x => `${regimenName(x)} [${drugsOf(x).map(d => `${d.name} ${d.dose || ''} ${d.route || ''}`.trim()).join(' + ')}] ${x.start || ''} to ${x.stop || 'ongoing'}`).join('; ');
+    if (!a.cultures.length) rows.push([...base, '', '', '', '', '', abx]);
+    a.cultures.forEach(c => orgsOf(c).forEach(o => rows.push([...base, c.drawn, c.specimen, o.name, o.type, o.phenotype, abx])));
+  }));
+  const csv = '﻿' + rows.map(r => r.map(q).join(',')).join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = 'patients-' + new Date().toISOString().slice(0, 10) + '.csv'; a.click();
+}
+function mergeById(a, b) {
+  const m = new Map((a || []).map(x => [x.id, x]));
+  (b || []).forEach(x => { if (!m.has(x.id)) m.set(x.id, x); });
+  return [...m.values()];
+}
+function mergeData(incoming) {
+  incoming.forEach(ip => {
+    const ex = patients.find(p => p.patientId.toLowerCase() === String(ip.patientId).toLowerCase());
+    if (!ex) { patients.push(ip); return; }
+    if (!ex.history && ip.history) ex.history = ip.history;
+    if (!ex.dob && ip.dob) ex.dob = ip.dob;
+    (ip.admissions || []).forEach(ia => {
+      const ea = ex.admissions.find(x => x.id === ia.id);
+      if (!ea) { ex.admissions.push(ia); return; }
+      ['cultures', 'abx', 'operations', 'transfers', 'lines'].forEach(k => { if (ea[k] || ia[k]) ea[k] = mergeById(ea[k], ia[k]); });
+      if (!ea.discharge && ia.discharge) { ea.discharge = ia.discharge; ea.outcome = ia.outcome; }
+    });
+    ex.admissions.sort((a, b) => a.date.localeCompare(b.date));
+  });
+}
+function importData(e) {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const data = JSON.parse(r.result);
+      if (!Array.isArray(data)) throw 0;
+      if (patients.length && confirm(`MERGE this backup (${data.length} patients) into the data already on this device?\n\nOK = Merge (keeps both)\nCancel = choose Replace instead`)) {
+        mergeData(data);
+      } else if (confirm(`Replace ALL data on this device with this backup (${data.length} patients)?`)) {
+        patients = data;
+      } else return;
+      selectedId = null; save(); renderAll();
+    } catch (err) { alert('This file is not a valid backup.'); }
+  };
+  r.readAsText(f); e.target.value = '';
+}
+
+/* ---------- Patients ---------- */
+function ageOf(dob) {
+  if (!dob) return '';
+  const d = new Date(dob), n = new Date();
+  if (isNaN(d) || d > n) return '';
+  let years = n.getFullYear() - d.getFullYear();
+  if (n.getMonth() < d.getMonth() || (n.getMonth() === d.getMonth() && n.getDate() < d.getDate())) years--;
+  if (years >= 2) return years + ' yr';
+  let months = (n.getFullYear() - d.getFullYear()) * 12 + n.getMonth() - d.getMonth();
+  if (n.getDate() < d.getDate()) months--;
+  if (months >= 1) return months + ' mo';
+  return Math.floor((n - d) / 86400000) + ' d';
+}
+function updateDobPreview() {
+  const a = ageOf(document.getElementById('inputPatientDob').value);
+  document.getElementById('dobAgePreview').textContent = a ? 'Age: ' + a : '';
+}
+function openNewPatientModal() {
+  document.querySelector('#modalPatient form').reset();
+  document.getElementById('dobAgePreview').textContent = '';
+  document.getElementById('editingPatientKey').value = '';
+  document.getElementById('patientModalTitle').textContent = 'Register new patient';
+  openModal('modalPatient');
+}
+function openEditPatientModal() {
+  const p = cur(); if (!p) return;
+  document.getElementById('editingPatientKey').value = p.id;
+  document.getElementById('patientModalTitle').textContent = 'Edit patient';
+  document.getElementById('inputPatientName').value = p.name;
+  document.getElementById('inputPatientId').value = p.patientId;
+  document.getElementById('inputPatientHistory').value = p.history || '';
+  document.getElementById('inputPatientDob').value = p.dob || '';
+  updateDobPreview();
+  openModal('modalPatient');
+}
+function savePatient(e) {
+  e.preventDefault();
+  const key = document.getElementById('editingPatientKey').value;
+  const mrn = document.getElementById('inputPatientId').value.trim();
+  const name = document.getElementById('inputPatientName').value.trim();
+  const history = document.getElementById('inputPatientHistory').value.trim();
+  const dob = document.getElementById('inputPatientDob').value;
+  if (dob && dob > new Date().toISOString().slice(0, 10)) { alert('Date of birth cannot be in the future.'); return; }
+  if (patients.some(p => p.id !== key && p.patientId.toLowerCase() === mrn.toLowerCase())) {
+    alert('A patient with this medical record number already exists. Open that patient and use "New admission" for a re-admission.'); return;
+  }
+  if (key) { const p = patients.find(x => x.id === key); Object.assign(p, { name, patientId: mrn, history, dob }); }
+  else { const p = { id: uid(), patientId: mrn, name, history, dob, admissions: [] }; patients.unshift(p); selectedId = p.id; }
+  save(); closeModal('modalPatient'); renderAll();
+}
+function deletePatient() {
+  const p = cur(); if (!p) return;
+  if (!confirm(`Delete patient "${p.name}" and all of their records? This cannot be undone.`)) return;
+  try { const d = JSON.parse(localStorage.getItem('patients_deleted_seeds')) || []; d.push(String(p.patientId)); localStorage.setItem('patients_deleted_seeds', JSON.stringify(d)); } catch (e) {}
+  patients = patients.filter(x => x.id !== p.id); selectedId = null; save(); renderAll();
+}
+// On a phone / narrow screen the patient opens right under his own card in the list; on a wide screen he opens in the side panel
+function isMobile() { return !window.matchMedia('(min-width:1024px)').matches; }
+function placeProfile() {
+  const card = document.getElementById('patientProfileCard'), home = document.getElementById('profileHome');
+  const btn = isMobile() && selectedId ? document.querySelector(`#patientsList [data-pid="${selectedId}"]`) : null;
+  if (btn) btn.after(card); else home.appendChild(card);
+}
+function selectPatient(id) {
+  const mobile = isMobile();
+  selectedId = (mobile && selectedId === id) ? null : id;   // tap again on a phone to close
+  renderAll();
+  if (mobile && selectedId) {
+    const b = document.querySelector(`#patientsList [data-pid="${selectedId}"]`);
+    if (b) b.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function patientStatus(p) {
+  if (p.admissions.some(a => a.outcome === 'Deceased' && a.discharge)) return 'deceased';
+  const last = p.admissions[p.admissions.length - 1];
+  return last && last.discharge ? 'discharged' : 'active';
+}
+function matchFilters(p, fs, fp) {
+  const last = p.admissions[p.admissions.length - 1];
+  if (fs === 'admitted' && !(last && !last.discharge)) return false;
+  if (fs === 'discharged' && !(last && last.discharge && last.outcome !== 'Deceased')) return false;
+  if (fs === 'deceased' && !p.admissions.some(a => a.outcome === 'Deceased' && a.discharge)) return false;
+  if (fp && !p.admissions.some(a => a.cultures.some(c => orgsOf(c).some(o => o.phenotype === fp)))) return false;
+  return true;
+}
+// where the patient is now (or was when he left): the last unit of the admission that matters
+function listLocation(p, s) {
+  const adms = p.admissions;
+  const la = s === 'deceased' ? [...adms].reverse().find(a => a.outcome === 'Deceased' && a.discharge) : adms[adms.length - 1];
+  if (!la) return { unit: '', date: '', service: '' };
+  const steps = deptSteps(la);
+  const sv = [...steps].reverse().find(x => x.sv);   // latest specialty recorded
+  return { unit: steps.length ? steps[steps.length - 1].d : '', date: la.discharge || '', service: sv ? sv.sv : '' };
+}
+function fillPlaceList() { const dl = document.getElementById('placeList'); if (dl) dl.innerHTML = allUnits().map(u => `<option value="${esc(u)}">`).join(''); }
+// old entries like "ICU B - Neurosurgery": keep the place (ICU B) as the unit and move the rest to "service"
+function splitPlace(txt) {
+  const m = String(txt || '').match(/^(.+?)\s*(?:[-–—\/,]|\()\s*(.+?)\)?\s*$/); if (!m) return null;
+  const kw = /\b(n?icu|picu|ccu|hdu|ward|room|er|ed|emergency|burns?)\b/i;
+  if (kw.test(m[1])) return { place: m[1].trim(), service: m[2].trim() };
+  if (kw.test(m[2])) return { place: m[2].trim(), service: m[1].trim() };
+  return null;
+}
+// a patient who died is not on antibiotics any more: ongoing ones are stopped on the day of death
+function stopAbxOnDeath() {
+  let ch = false;
+  patients.forEach(p => p.admissions.forEach(a => {
+    if (a.outcome !== 'Deceased' || !a.discharge) return;
+    (a.abx || []).forEach(x => { if (!x.stop && (!x.start || x.start <= a.discharge)) { x.stop = a.discharge; ch = true; } });
+  }));
+  if (ch) save();
+}
+function migratePlaces() {
+  let ch = false;
+  patients.forEach(p => p.admissions.forEach(a => [a, ...(a.transfers || [])].forEach(x => {
+    if (x.service) return;
+    const r = splitPlace(x.dept); if (r) { x.dept = r.place; x.service = r.service; ch = true; }
+  })));
+  if (ch) save();
+}
+function allUnits() {   // every unit name used anywhere (one entry per spelling-insensitive name)
+  const m = new Map();
+  patients.forEach(p => p.admissions.forEach(a => deptSteps(a).forEach(st => { const k = normUnit(st.d); if (k && !m.has(k)) m.set(k, st.d); })));
+  return [...m.values()].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+function fillUnitSelect(id) {
+  const el = document.getElementById(id); if (!el) return;
+  const cur = el.value, us = allUnits();
+  el.innerHTML = '<option value="">All units</option>' + us.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join('');
+  el.value = us.some(u => u === cur) ? cur : '';
+}
+function renderPatientsList() {
+  fillUnitSelect('filterUnit');
+  document.getElementById('profileHome').appendChild(document.getElementById('patientProfileCard'));   // keep it safe while the list is rebuilt
+  const q =document.getElementById('searchInput').value.trim().toLowerCase();
+  const fs = document.getElementById('filterStatus').value, fp = document.getElementById('filterPattern').value, fu = document.getElementById('filterUnit').value;
+  const rank = { active: 0, discharged: 1, deceased: 2 };
+  const list = patients.filter(p => (p.name.toLowerCase().includes(q) || p.patientId.toLowerCase().includes(q)) && matchFilters(p, fs, fp) && (!fu || normUnit(listLocation(p, patientStatus(p)).unit) === normUnit(fu)))
+    .map((p, i) => ({ p, i, s: patientStatus(p) }))
+    .sort((x, y) => rank[x.s] - rank[y.s] || x.i - y.i)   // current patients first, then discharged, then deceased
+    .map(x => x.p);
+  document.getElementById('showingCount').textContent = `${list.length} patient${list.length === 1 ? '' : 's'}`;
+  document.getElementById('patientsList').innerHTML = list.length ? list.map(p => { const s = patientStatus(p), loc = listLocation(p, s); return `
+    <button data-pid="${p.id}" onclick="selectPatient('${p.id}')" class="scroll-mt-24 w-full text-left p-3 rounded-xl border transition ${s === 'discharged' ? 'border-l-4 border-l-emerald-500' : s === 'deceased' ? 'border-l-4 border-l-red-500' : ''} ${p.id === selectedId ? 'bg-medical-50 border-medical-500' : 'bg-white border-slate-100 hover:bg-slate-50'}">
+      <div class="flex justify-between items-start gap-2"><div class="font-semibold text-sm">${esc(p.name)}</div>
+        ${s === 'discharged' ? '<span class="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200"><i class="fa-solid fa-circle text-[6px] mr-1 align-middle"></i>Discharged</span>'
+          : s === 'deceased' ? '<span class="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-red-50 text-red-700 border border-red-200"><i class="fa-solid fa-circle text-[6px] mr-1 align-middle"></i>Deceased</span>'
+          : loc.unit ? `<span class="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200"><i class="fa-solid fa-hospital mr-1"></i>${esc(loc.unit)}</span>` : ''}</div>
+      <div class="text-xs text-slate-500 mt-0.5">MRN: ${esc(p.patientId)}${p.dob ? ' · ' + ageOf(p.dob) : ''} · ${p.admissions.length} admission${p.admissions.length === 1 ? '' : 's'}</div>
+      ${loc.service ? `<div class="text-xs text-violet-700 mt-0.5"><i class="fa-solid fa-stethoscope mr-1"></i>${esc(loc.service)}</div>` : ''}
+      ${s === 'discharged' ? `<div class="text-xs font-medium text-emerald-700 mt-0.5">Discharged${loc.unit ? ' from ' + esc(loc.unit) : ''} · ${fmt(loc.date)}</div>`
+        : s === 'deceased' ? `<div class="text-xs font-medium text-red-700 mt-0.5">Died${loc.unit ? ' in ' + esc(loc.unit) : ''} · ${fmt(loc.date)}</div>` : ''}
+    </button>`; }).join('') : '<p class="text-center text-xs text-slate-400 py-6">No patients found</p>';
+  placeProfile();
+}
+
+/* ---------- Admissions ---------- */
+function openNewAdmissionModal(aid) {   // no argument = new admission; with an admission id = edit that admission
+  const p = cur(); if (!p) return;
+  document.querySelector('#modalNewAdmission form').reset(); fillPlaceList();
+  document.getElementById('editingAdmissionId').value = aid || '';
+  document.getElementById('btnSaveAdmission').textContent = aid ? 'Save changes' : 'Add admission';
+  if (aid) {
+    const a = p.admissions.find(x => x.id === aid);
+    document.getElementById('admissionModalTitle').textContent = 'Edit admission';
+    document.getElementById('inputAdmissionDate').value = a.date || '';
+    document.getElementById('inputAdmissionOutcome').value = a.outcome || 'Discharged';
+    document.getElementById('inputAdmissionDischarge').value = a.discharge || '';
+    document.getElementById('inputAdmissionDiagnosis').value = a.diagnosis || '';
+    document.getElementById('inputAdmissionReason').value = a.reason || '';
+    document.getElementById('inputAdmissionDept').value = a.dept || '';
+    document.getElementById('inputAdmissionService').value = a.service || '';
+  } else {
+    document.getElementById('inputAdmissionDate').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('admissionModalTitle').textContent = p.admissions.length ? 'Re-admission (new admission)' : 'New hospital admission';
+  }
+  openModal('modalNewAdmission');
+}
+function outcomeWord(a) { return a.outcome === 'Deceased' ? 'Deceased' : 'Discharged'; }
+function stayText(a) {
+  if (!a.discharge) return null;
+  const days = Math.round((new Date(a.discharge) - new Date(a.date)) / 86400000);
+  return `${fmt(a.discharge)} (${days} day${days === 1 ? '' : 's'})`;
+}
+function openDischargeModal(aid) {
+  const a = cur().admissions.find(x => x.id === aid);
+  document.getElementById('targetAdmissionIdForDischarge').value = aid;
+  document.getElementById('inputDischargeOutcome').value = a.outcome || 'Discharged';
+  document.getElementById('inputDischargeDate').value = a.discharge || new Date().toISOString().slice(0, 10);
+  document.getElementById('inputDischargeDate').min = a.date;
+  openModal('modalDischarge');
+}
+function saveDischarge(e) {
+  e.preventDefault();
+  const a = cur().admissions.find(x => x.id === document.getElementById('targetAdmissionIdForDischarge').value);
+  const d = document.getElementById('inputDischargeDate').value;
+  if (d && d < a.date) { alert('Discharge date cannot be before the admission date.'); return; }
+  a.discharge = d; a.outcome = document.getElementById('inputDischargeOutcome').value;
+  save(); closeModal('modalDischarge'); renderAll();
+}
+function saveNewAdmission(e) {
+  e.preventDefault(); const p = cur(); if (!p) return;
+  const dis = document.getElementById('inputAdmissionDischarge').value;
+  if (dis && dis < document.getElementById('inputAdmissionDate').value) { alert('Discharge date cannot be before the admission date.'); return; }
+  const fields = { date: document.getElementById('inputAdmissionDate').value,
+    discharge: dis,
+    outcome: document.getElementById('inputAdmissionOutcome').value,
+    diagnosis: document.getElementById('inputAdmissionDiagnosis').value.trim(),
+    reason: document.getElementById('inputAdmissionReason').value.trim(),
+    dept: document.getElementById('inputAdmissionDept').value.trim(),
+    service: document.getElementById('inputAdmissionService').value.trim() };
+  const eid = document.getElementById('editingAdmissionId').value;
+  if (eid) Object.assign(p.admissions.find(x => x.id === eid), fields);   // keeps its cultures, antibiotics, lines, operations and transfers
+  else p.admissions.push({ id: uid(), ...fields, cultures: [], abx: [] });
+  p.admissions.sort((a, b) => a.date.localeCompare(b.date));   // oldest first => admission #1, #2 ...
+  save(); closeModal('modalNewAdmission'); renderAll();
+}
+function deleteAdmission(aid) {
+  if (!confirm('Delete this admission and its cultures/antibiotics?')) return;
+  const p = cur(); p.admissions = p.admissions.filter(a => a.id !== aid); save(); renderAll();
+}
+
+/* ---------- Department transfers ---------- */
+function deptSteps(a) {
+  const steps = [];
+  if (a.dept) steps.push({ d: a.dept, sv: a.service || '', date: a.date });
+  (a.transfers || []).forEach(t => steps.push({ d: t.dept, sv: t.service || '', date: t.date, id: t.id, notes: t.notes }));
+  return steps;
+}
+function deptHtml(a) {
+  const steps = deptSteps(a);
+  if (!steps.length) return '<span class="text-slate-400">Department not recorded</span>';
+  return '<i class="fa-solid fa-hospital mr-1 text-slate-400"></i>' + steps.map((s, i) => `
+    <span class="inline-flex items-center gap-1 ${i === steps.length - 1 ? 'font-semibold text-teal-700' : ''}">${esc(s.d)}${s.sv ? ` <span class="text-slate-400 font-normal">[${esc(s.sv)}]</span>` : ''}
+      <span class="text-slate-400 font-normal">(${fmt(s.date)})</span>
+      ${s.id ? `<button onclick="openTransferModal('${a.id}','${s.id}')" title="Edit this transfer" class="text-slate-300 hover:text-medical-600"><i class="fa-solid fa-pen"></i></button><button onclick="deleteTransfer('${a.id}','${s.id}')" title="Remove this transfer" class="text-slate-300 hover:text-red-500"><i class="fa-solid fa-xmark"></i></button>` : ''}
+    </span>`).join(' <i class="fa-solid fa-arrow-right text-slate-400 mx-1"></i> ');
+}
+function deptText(a) {
+  const steps = deptSteps(a);
+  return steps.length ? steps.map(s => `${esc(s.d)}${s.sv ? ' [' + esc(s.sv) + ']' : ''} (${fmt(s.date)})`).join(' &rarr; ') : 'Not recorded';
+}
+function openTransferModal(aid, tid) {
+  const a = cur().admissions.find(x => x.id === aid);
+  document.querySelector('#modalTransfer form').reset(); fillPlaceList();
+  document.getElementById('targetAdmissionIdForTransfer').value = aid;
+  document.getElementById('editingTransferId').value = tid || '';
+  document.getElementById('transferModalTitle').textContent = tid ? 'Edit transfer' : 'Transfer to another department';
+  if (tid) {
+    const t = a.transfers.find(x => x.id === tid);
+    document.getElementById('transferFromText').textContent = '';
+    document.getElementById('inputTransferDate').value = t.date || '';
+    document.getElementById('inputTransferDept').value = t.dept || '';
+    document.getElementById('inputTransferService').value = t.service || '';
+  } else {
+    const steps = deptSteps(a);
+    document.getElementById('transferFromText').textContent = steps.length ? 'Currently in: ' + steps[steps.length - 1].d : '';
+    document.getElementById('inputTransferDate').value = new Date().toISOString().slice(0, 10);
+  }
+  openModal('modalTransfer');
+}
+function saveNewTransfer() {}
+function saveTransfer(e) {
+  e.preventDefault(); const p = cur();
+  const a = p.admissions.find(x => x.id === document.getElementById('targetAdmissionIdForTransfer').value);
+  a.transfers = a.transfers || [];
+  const eid = document.getElementById('editingTransferId').value;
+  const rec = { id: eid || uid(), date: document.getElementById('inputTransferDate').value, dept: document.getElementById('inputTransferDept').value.trim(), service: document.getElementById('inputTransferService').value.trim() };
+  if (eid) a.transfers = a.transfers.map(t => t.id === eid ? rec : t); else a.transfers.push(rec);
+  a.transfers.sort((x, y) => x.date.localeCompare(y.date));
+  save(); closeModal('modalTransfer'); renderAll();
+}
+function deleteTransfer(aid, tid) {
+  if (!confirm('Remove this transfer?')) return;
+  const a = cur().admissions.find(x => x.id === aid); a.transfers = (a.transfers || []).filter(t => t.id !== tid); save(); renderAll();
+}
+
+/* ---------- Lines / devices ---------- */
+const LINE_TYPES = ['Central venous catheter (CVC)', 'PICC line', 'Dialysis catheter', 'Arterial line', 'Peripheral IV cannula', 'Urinary catheter (Foley)', 'Endotracheal tube / Mechanical ventilation', 'Tracheostomy', 'Nasogastric tube', 'Chest tube', 'Surgical drain', 'EVD / ventricular drain'];
+function lineDays(l) {
+  if (!l.inserted) return '';
+  const end = l.removed ? new Date(l.removed) : new Date(new Date().toISOString().slice(0, 10));
+  const n = Math.round((end - new Date(l.inserted)) / 86400000) + 1;
+  return n > 0 ? n : '';
+}
+function openLineModal(aid, lid) {
+  document.querySelector('#modalLine form').reset();
+  document.getElementById('inputLineOther').classList.add('hidden');
+  document.getElementById('targetAdmissionIdForLine').value = aid;
+  document.getElementById('editingLineId').value = lid || '';
+  document.getElementById('lineModalTitle').textContent = lid ? 'Edit line / device' : 'Add line / device';
+  if (!lid) { document.getElementById('inputLineInserted').value = new Date().toISOString().slice(0, 10); openModal('modalLine'); return; }
+  const l = cur().admissions.find(x => x.id === aid).lines.find(x => x.id === lid);
+  if (LINE_TYPES.includes(l.type)) document.getElementById('inputLineType').value = l.type;
+  else { document.getElementById('inputLineType').value = 'Other'; document.getElementById('inputLineOther').classList.remove('hidden'); document.getElementById('inputLineOther').value = l.type; }
+  document.getElementById('inputLineSite').value = l.site || '';
+  document.getElementById('inputLineInserted').value = l.inserted || '';
+  document.getElementById('inputLineRemoved').value = l.removed || '';
+  openModal('modalLine');
+}
+function saveLine(e) {
+  e.preventDefault(); const p = cur();
+  const a = p.admissions.find(x => x.id === document.getElementById('targetAdmissionIdForLine').value);
+  let type = document.getElementById('inputLineType').value;
+  if (type === 'Other') type = document.getElementById('inputLineOther').value.trim();
+  if (!type) { alert('Please enter the line / device name.'); return; }
+  const ins = document.getElementById('inputLineInserted').value, rem = document.getElementById('inputLineRemoved').value;
+  if (rem && rem < ins) { alert('Removal date cannot be before the insertion date.'); return; }
+  a.lines = a.lines || [];
+  const eid = document.getElementById('editingLineId').value;
+  const rec = { id: eid || uid(), type, site: document.getElementById('inputLineSite').value.trim(), inserted: ins, removed: rem };
+  if (eid) a.lines = a.lines.map(l => l.id === eid ? rec : l); else a.lines.push(rec);
+  a.lines.sort((x, y) => x.inserted.localeCompare(y.inserted));
+  expandedSections.add(a.id + ':lines');
+  save(); closeModal('modalLine'); renderAll();
+}
+function deleteLine(aid, lid) {
+  if (!confirm('Delete this line / device?')) return;
+  const a = cur().admissions.find(x => x.id === aid); a.lines = (a.lines || []).filter(l => l.id !== lid); save(); renderAll();
+}
+function linesReport(a) {
+  const ls = a.lines || [];
+  if (!ls.length) return '';
+  const th = 'border border-slate-400 px-2 py-1 text-left bg-slate-100 font-semibold';
+  const td = 'border border-slate-400 px-2 py-1 align-top';
+  return `<p class="font-semibold mt-2 mb-1">Lines / devices</p>
+    <table class="w-full border-collapse text-xs mb-3"><thead><tr><th class="${th}">Line / device</th><th class="${th}">Site</th><th class="${th}">Inserted</th><th class="${th}">Removed</th><th class="${th}">Days in place</th></tr></thead><tbody>
+    ${ls.map(l => `<tr><td class="${td} font-semibold">${esc(l.type)}</td><td class="${td}">${esc(l.site) || '—'}</td><td class="${td}">${fmt(l.inserted)}</td><td class="${td}">${l.removed ? fmt(l.removed) : 'Still in place'}</td><td class="${td}">${lineDays(l) || '—'}${l.removed ? '' : ' (so far)'}</td></tr>`).join('')}
+    </tbody></table>`;
+}
+
+/* ---------- Operations ---------- */
+function openOperationModal(aid, oid) {
+  document.querySelector('#modalOperation form').reset();
+  document.getElementById('targetAdmissionIdForOp').value = aid;
+  document.getElementById('editingOpId').value = oid || '';
+  document.getElementById('opModalTitle').textContent = oid ? 'Edit operation / procedure' : 'Add operation / procedure';
+  if (oid) {
+    const o = cur().admissions.find(x => x.id === aid).operations.find(x => x.id === oid);
+    document.getElementById('inputOpDate').value = o.date || '';
+    document.getElementById('inputOpName').value = o.name || '';
+  } else document.getElementById('inputOpDate').value = new Date().toISOString().slice(0, 10);
+  openModal('modalOperation');
+}
+function saveOperation(e) {
+  e.preventDefault(); const p = cur();
+  const a = p.admissions.find(x => x.id === document.getElementById('targetAdmissionIdForOp').value);
+  a.operations = a.operations || [];
+  const eid = document.getElementById('editingOpId').value;
+  const rec = { id: eid || uid(), date: document.getElementById('inputOpDate').value, name: document.getElementById('inputOpName').value.trim() };
+  if (eid) a.operations = a.operations.map(o => o.id === eid ? rec : o); else a.operations.push(rec);
+  a.operations.sort((x, y) => x.date.localeCompare(y.date));
+  expandedSections.add(a.id + ':ops');
+  save(); closeModal('modalOperation'); renderAll();
+}
+function deleteOperation(aid, oid) {
+  if (!confirm('Delete this operation?')) return;
+  const a = cur().admissions.find(x => x.id === aid); a.operations = (a.operations || []).filter(o => o.id !== oid); save(); renderAll();
+}
+function opsReport(a) {
+  const ops = a.operations || [];
+  if (!ops.length) return '';
+  const th = 'border border-slate-400 px-2 py-1 text-left bg-slate-100 font-semibold';
+  const td = 'border border-slate-400 px-2 py-1 align-top';
+  return `<p class="font-semibold mt-2 mb-1">Operations / procedures</p>
+    <table class="w-full border-collapse text-xs mb-3"><thead><tr><th class="${th}">Date</th><th class="${th}">Operation</th></tr></thead><tbody>
+    ${ops.map(o => `<tr><td class="${td}">${fmt(o.date)}</td><td class="${td} font-semibold">${esc(o.name)}</td></tr>`).join('')}
+    </tbody></table>`;
+}
+
+/* ---------- Cultures ---------- */
+function orgsOf(c) { return c.organisms || [{ name: c.organism, type: c.type, phenotype: c.phenotype }]; }
+const ORG_GROUPS = {
+  'Gram-negative': ['Escherichia coli', 'Klebsiella pneumoniae', 'Acinetobacter baumannii', 'Pseudomonas aeruginosa', 'Enterobacter cloacae', 'Proteus mirabilis', 'Serratia marcescens', 'Stenotrophomonas maltophilia', 'Citrobacter freundii', 'Salmonella spp.', 'Burkholderia cepacia'],
+  'Gram-positive': ['Staphylococcus aureus', 'Coagulase-negative Staphylococci', 'Enterococcus faecalis', 'Enterococcus faecium', 'Streptococcus pneumoniae', 'Streptococcus pyogenes', 'Streptococcus agalactiae'],
+  'Fungi / Yeast': ['Candida albicans', 'Candida auris', 'Candida tropicalis', 'Candida glabrata', 'Aspergillus fumigatus'],
+  'No growth': ['No growth']
+};
+const ORG_TYPE = {};
+Object.entries(ORG_GROUPS).forEach(([t, l]) => l.forEach(n => ORG_TYPE[n] = t));
+const ORG_OPTIONS = Object.entries(ORG_GROUPS).map(([t, l]) => `<optgroup label="${t}">${l.map(n => `<option>${n}</option>`).join('')}</optgroup>`).join('');
+function onOrgSelect(sel) {
+  const row = sel.closest('.org-row'), other = row.querySelector('.org-other');
+  other.classList.toggle('hidden', sel.value !== '__other');
+  if (sel.value === '__other') other.focus();
+  if (ORG_TYPE[sel.value]) row.querySelector('.org-type').value = ORG_TYPE[sel.value];
+}
+function orgNameOf(row) {
+  const v = row.querySelector('.org-select').value;
+  return v === '__other' ? row.querySelector('.org-other').value.trim() : v;
+}
+function addOrgRow() {
+  const row = document.createElement('div');
+  row.className = 'org-row border border-slate-200 rounded-xl p-3 space-y-2 bg-slate-50';
+  row.innerHTML = `
+    <div class="flex gap-2 items-center">
+      <div class="flex-1 space-y-2">
+        <select class="org-select w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none" onchange="onOrgSelect(this)">
+          <option value="">— Select organism —</option>${ORG_OPTIONS}
+          <option value="__other">Other (type manually)…</option>
+        </select>
+        <input class="org-other hidden w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none" placeholder="Type the organism name">
+      </div>
+      <button type="button" onclick="removeOrgRow(this)" title="Remove" class="text-slate-400 hover:text-red-500 px-1"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="grid grid-cols-2 gap-2">
+      <select class="org-type px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none">
+        <option>Gram-negative</option><option>Gram-positive</option><option>Fungi / Yeast</option><option>No growth</option><option>Other</option>
+      </select>
+      <select class="org-pheno px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none">
+        <option value="">— Resistance pattern —</option><option>Pan-sensitive</option><option>ESBL</option><option>CRE / CRKP</option><option>CRAB</option><option>MRSA</option><option>VRE</option><option>MDR</option><option>XDR</option><option>PDR</option><option>Other</option>
+      </select>
+    </div>`;
+  document.getElementById('cultureOrgRows').appendChild(row);
+}
+function removeOrgRow(btn) {
+  if (document.querySelectorAll('#cultureOrgRows .org-row').length > 1) btn.closest('.org-row').remove();
+}
+const SPECIMENS = ['Blood', 'Urine', 'Sputum', 'Endotracheal aspirate', 'Wound swab', 'CSF', 'Catheter tip', 'Stool'];
+function openNewCultureModal(aid, cid) {
+  document.querySelector('#modalNewCulture form').reset();
+  document.getElementById('inputCultureSpecimenOther').classList.add('hidden');
+  document.getElementById('cultureOrgRows').innerHTML = '';
+  document.getElementById('targetAdmissionIdForCulture').value = aid;
+  document.getElementById('editingCultureId').value = cid || '';
+  document.getElementById('cultureModalTitle').textContent = cid ? 'Edit culture result' : 'Add culture result';
+  if (!cid) { addOrgRow(); openModal('modalNewCulture'); return; }
+  const c = cur().admissions.find(x => x.id === aid).cultures.find(x => x.id === cid);
+  document.getElementById('inputCultureDrawn').value = c.drawn || '';
+  const spOther = document.getElementById('inputCultureSpecimenOther');
+  if (!c.specimen || SPECIMENS.includes(c.specimen)) { document.getElementById('inputCultureSpecimen').value = c.specimen || 'Blood'; spOther.classList.add('hidden'); }
+  else { document.getElementById('inputCultureSpecimen').value = 'Other'; spOther.classList.remove('hidden'); spOther.value = c.specimen; }
+  orgsOf(c).forEach(o => {
+    addOrgRow();
+    const r = document.querySelector('#cultureOrgRows .org-row:last-child');
+    if (ORG_TYPE[o.name]) r.querySelector('.org-select').value = o.name;
+    else { r.querySelector('.org-select').value = '__other'; r.querySelector('.org-other').classList.remove('hidden'); r.querySelector('.org-other').value = o.name || ''; }
+    r.querySelector('.org-type').value = o.type || 'Other';
+    r.querySelector('.org-pheno').value = o.phenotype || '';
+  });
+  openModal('modalNewCulture');
+}
+function saveNewCulture(e) {
+  e.preventDefault(); const p = cur();
+  const a = p.admissions.find(x => x.id === document.getElementById('targetAdmissionIdForCulture').value);
+  const organisms = [...document.querySelectorAll('#cultureOrgRows .org-row')].map(r => ({
+    name: orgNameOf(r), type: r.querySelector('.org-type').value, phenotype: r.querySelector('.org-pheno').value
+  })).filter(o => o.name);
+  if (!organisms.length) { alert('Please enter at least one organism name.'); return; }
+  let specimen = document.getElementById('inputCultureSpecimen').value;
+  if (specimen === 'Other') {
+    specimen = document.getElementById('inputCultureSpecimenOther').value.trim();
+    if (!specimen) { alert('Please type where the sample was taken from.'); return; }
+  }
+  const eid = document.getElementById('editingCultureId').value;
+  const rec = { id: eid || uid(), drawn: document.getElementById('inputCultureDrawn').value,
+    specimen,
+    organisms };
+  if (eid) a.cultures = a.cultures.map(c => c.id === eid ? rec : c); else a.cultures.push(rec);
+  a.cultures.sort((x, y) => x.drawn.localeCompare(y.drawn));
+  expandedSections.add(a.id + ':cultures');
+  save(); closeModal('modalNewCulture'); renderAll();
+}
+function deleteCulture(aid, cid) {
+  if (!confirm('Delete this culture result?')) return;
+  const a = cur().admissions.find(x => x.id === aid); a.cultures = a.cultures.filter(c => c.id !== cid); save(); renderAll();
+}
+
+/* ---------- Antibiotics ---------- */
+function abxDays(x) {
+  if (!x.start) return '';
+  const end = x.stop ? new Date(x.stop) : new Date(new Date().toISOString().slice(0, 10));
+  const n = Math.round((end - new Date(x.start)) / 86400000) + 1;
+  return n > 0 ? n : '';
+}
+function addDrugRow() {
+  const row = document.createElement('div');
+  row.className = 'drug-row grid grid-cols-12 gap-2 items-center';
+  row.innerHTML = `
+    <input class="drug-name col-span-12 sm:col-span-5 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Drug name">
+    <input class="drug-dose col-span-7 sm:col-span-4 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Dose / frequency">
+    <select class="drug-route col-span-3 sm:col-span-2 px-2 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none"><option>IV</option><option>PO</option><option>IM</option><option>Inhaled</option><option>Other</option></select>
+    <button type="button" onclick="removeDrugRow(this)" class="col-span-2 sm:col-span-1 text-slate-400 hover:text-red-500"><i class="fa-solid fa-xmark"></i></button>`;
+  document.getElementById('abxDrugRows').appendChild(row);
+}
+function removeDrugRow(btn) {
+  const rows = document.querySelectorAll('#abxDrugRows .drug-row');
+  if (rows.length > 1) btn.closest('.drug-row').remove();
+}
+function openNewAbxModal(aid, xid) {
+  document.querySelector('#modalNewAbx form').reset();
+  document.getElementById('abxDrugRows').innerHTML = '';
+  document.getElementById('targetAdmissionIdForAbx').value = aid;
+  document.getElementById('editingAbxId').value = xid || '';
+  document.getElementById('abxModalTitle').textContent = xid ? 'Edit antibiotic / combination' : 'Add antibiotic / combination';
+  if (!xid) { addDrugRow(); openModal('modalNewAbx'); return; }
+  const x = cur().admissions.find(a => a.id === aid).abx.find(a => a.id === xid);
+  drugsOf(x).forEach(d => {
+    addDrugRow();
+    const r = document.querySelector('#abxDrugRows .drug-row:last-child');
+    r.querySelector('.drug-name').value = d.name || ''; r.querySelector('.drug-dose').value = d.dose || ''; r.querySelector('.drug-route').value = d.route || 'IV';
+  });
+  document.getElementById('inputAbxStart').value = x.start || '';
+  document.getElementById('inputAbxStop').value = x.stop || '';
+  openModal('modalNewAbx');
+}
+function saveNewAbx(e) {
+  e.preventDefault(); const p = cur();
+  const a = p.admissions.find(x => x.id === document.getElementById('targetAdmissionIdForAbx').value);
+  const drugs = [...document.querySelectorAll('#abxDrugRows .drug-row')].map(r => ({
+    name: r.querySelector('.drug-name').value.trim(), dose: r.querySelector('.drug-dose').value.trim(), route: r.querySelector('.drug-route').value
+  })).filter(d => d.name);
+  if (!drugs.length) { alert('Please enter at least one drug name.'); return; }
+  const eid = document.getElementById('editingAbxId').value;
+  const rec = { id: eid || uid(), drugs,
+    start: document.getElementById('inputAbxStart').value,
+    stop: document.getElementById('inputAbxStop').value };
+  if (eid) a.abx = a.abx.map(x => x.id === eid ? rec : x); else a.abx.push(rec);
+  a.abx.sort((x, y) => x.start.localeCompare(y.start));
+  expandedSections.add(a.id + ':abx');
+  save(); closeModal('modalNewAbx'); renderAll();
+}
+function deleteAbx(aid, xid) {
+  if (!confirm('Delete this antibiotic entry?')) return;
+  const a = cur().admissions.find(x => x.id === aid); a.abx = a.abx.filter(c => c.id !== xid); save(); renderAll();
+}
+
+/* ---------- Rendering ---------- */
+function cultureBadge(t) {
+  const c = t === 'Gram-negative' ? 'bg-rose-50 text-rose-700 border-rose-200'
+          : t === 'Gram-positive' ? 'bg-violet-50 text-violet-700 border-violet-200'
+          : t === 'No growth' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+          : 'bg-amber-50 text-amber-700 border-amber-200';
+  return `<span class="text-[11px] font-semibold px-2 py-0.5 rounded-md border ${c}">${esc(t)}</span>`;
+}
+function phenoBadge(t) {
+  if (!t) return '';
+  const good = t === 'Pan-sensitive';
+  return `<span class="text-[11px] font-semibold px-2 py-0.5 rounded-md border ml-1 ${good ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}">${esc(t)}</span>`;
+}
+
+const expandedSections = new Set();
+function toggleSection(aid, key) {
+  const k = aid + ':' + key;
+  if (expandedSections.has(k)) expandedSections.delete(k); else expandedSections.add(k);
+  renderAll();
+}
+// sections are closed by default; opening one shows all its items, newest first
+function listHtml(aid, key, items, emptyMsg) {
+  if (!expandedSections.has(aid + ':' + key)) return '';
+  if (!items.length) return `<p class="text-xs text-slate-400">${emptyMsg}</p>`;
+  return [...items].reverse().join('');
+}
+function secHead(aid, key, color, icon, title, n, extra = '') {
+  const open = expandedSections.has(aid + ':' + key);
+  return `<button onclick="toggleSection('${aid}','${key}')" class="text-sm font-bold ${color} flex items-center gap-1.5 hover:opacity-75"><i class="fa-solid fa-chevron-${open ? 'down' : 'right'} text-[10px] w-3"></i><i class="fa-solid ${icon}"></i>${title} <span class="text-xs font-normal text-slate-400">(${n})</span>${extra}</button>`;
+}
+// antibiotics the patient is still on = no stop date
+function ongoingAbx(a) { return a.abx.filter(x => !x.stop); }
+function abxBadge(a) {
+  const n = ongoingAbx(a).length;
+  return n ? `<span class="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700 border border-emerald-300"><i class="fa-solid fa-circle text-[6px] mr-1 align-middle"></i>${n} ongoing</span>` : '';
+}
+function abxHint(a) {
+  const on = ongoingAbx(a);
+  return on.length ? `<div class="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5">Ongoing: ${on.map(x => esc(regimenName(x))).join(', ')}</div>` : '';
+}
+function abxOrdered(a) {   // ascending by date, with the ongoing ones last (they end up on top once the list is reversed)
+  return [...a.abx].sort((x, y) => (!x.stop - !y.stop) || (x.start || '').localeCompare(y.start || ''));
+}
+function renderAdmissions(p) {
+  const box = document.getElementById('admissionsContainer');
+  document.querySelector('#btnNewAdmission span').textContent = p.admissions.length ? 'Re-admission' : 'New admission';
+  if (!p.admissions.length) { box.innerHTML = '<div class="bg-white rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-400">No admissions recorded yet. Click “New admission”.</div>'; return; }
+  box.innerHTML = p.admissions.map((a, i) => ({ a, n: i + 1 })).reverse().map(({ a, n }) => `
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+      <div class="bg-slate-50 px-5 py-3 flex flex-wrap justify-between items-start gap-2 border-b border-slate-100">
+        <div>
+          <div class="font-bold text-medical-700"><i class="fa-solid fa-calendar-day mr-1"></i>Admission #${n}${n > 1 ? ' <span class="text-[11px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-md ml-1">Re-admission</span>' : ''} · ${fmt(a.date)}</div>
+          <div class="text-xs mt-1">${a.discharge ? (a.outcome === 'Deceased' ? `<span class="text-red-700 font-semibold"><i class="fa-solid fa-heart-crack mr-1"></i>Deceased ${stayText(a)}</span>` : `<span class="text-emerald-700 font-semibold"><i class="fa-solid fa-person-walking-arrow-right mr-1"></i>Discharged ${stayText(a)}</span>`) : '<span class="text-orange-600 font-semibold"><i class="fa-solid fa-bed-pulse mr-1"></i>Currently admitted</span>'}</div>
+          <div class="text-xs text-slate-600 mt-1">${deptHtml(a)}</div>
+          ${a.diagnosis ? `<div class="text-sm font-semibold text-slate-800 mt-1">Diagnosis: ${esc(a.diagnosis)}</div>` : ''}
+          <div class="text-xs text-slate-600 mt-1">Reason: ${esc(a.reason)}</div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="openNewAdmissionModal('${a.id}')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg font-semibold"><i class="fa-solid fa-pen mr-1"></i>Edit</button>
+          <button onclick="openDischargeModal('${a.id}')" class="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-lg font-semibold"><i class="fa-solid fa-person-walking-arrow-right mr-1"></i>${a.discharge ? 'Edit outcome' : 'Discharge / outcome'}</button>
+          <button onclick="openTransferModal('${a.id}')" class="text-xs bg-teal-50 hover:bg-teal-100 text-teal-700 px-2.5 py-1 rounded-lg font-semibold"><i class="fa-solid fa-right-left mr-1"></i>Transfer</button>
+          <button onclick="deleteAdmission('${a.id}')" class="text-xs text-red-500 hover:text-red-700"><i class="fa-solid fa-trash"></i></button>
+        </div>
+      </div>
+      <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div>
+          <div class="flex justify-between items-center mb-2">
+            ${secHead(a.id, 'cultures', 'text-amber-700', 'fa-vial', 'Cultures', a.cultures.length)}
+            <button onclick="openNewCultureModal('${a.id}')" class="text-xs bg-amber-50 hover:bg-amber-100 text-amber-700 px-2.5 py-1 rounded-lg font-semibold">+ Add</button>
+          </div>
+          <div class="space-y-2">${listHtml(a.id, 'cultures', a.cultures.map(c => `
+            <div class="border border-slate-100 rounded-xl p-3 text-xs">
+              <div class="flex justify-between gap-2"><span class="text-[11px] text-slate-500">${c.specimen ? esc(c.specimen) : 'Culture'}</span>
+                <span class="flex gap-2"><button onclick="openNewCultureModal('${a.id}','${c.id}')" title="Edit" class="text-slate-300 hover:text-medical-600"><i class="fa-solid fa-pen"></i></button>
+                <button onclick="deleteCulture('${a.id}','${c.id}')" class="text-slate-300 hover:text-red-500"><i class="fa-solid fa-xmark"></i></button></span></div>
+              ${orgsOf(c).map((o, i) => `<div class="${i ? 'mt-2 pt-2 border-t border-slate-100' : 'mt-1'}"><span class="font-semibold italic text-sm">${esc(o.name)}</span>
+                <div class="mt-1">${cultureBadge(o.type)}${phenoBadge(o.phenotype)}</div></div>`).join('')}
+              <div class="text-slate-500 mt-1.5">Drawn: ${fmt(c.drawn)}</div>
+            </div>`), 'No cultures yet.')}</div>
+        </div>
+        <div>
+          <div class="flex justify-between items-center mb-2">
+            ${secHead(a.id, 'abx', 'text-blue-700', 'fa-pills', 'Antibiotic plan', a.abx.length, abxBadge(a))}
+            <button onclick="openNewAbxModal('${a.id}')" class="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-2.5 py-1 rounded-lg font-semibold">+ Add</button>
+          </div>
+          <div class="space-y-2">${listHtml(a.id, 'abx', abxOrdered(a).map(x => { const ds = drugsOf(x); return `
+            <div class="border rounded-xl p-3 text-xs ${x.stop ? 'border-slate-100' : 'border-emerald-300 bg-emerald-50 border-l-4 border-l-emerald-500'}">
+              <div class="flex justify-between gap-2"><span class="font-semibold text-sm">${esc(regimenName(x))}${ds.length > 1 ? ' <span class="text-[11px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md ml-1">Combination</span>' : ''}${x.stop ? '' : ' <span class="text-[11px] font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md ml-1">Ongoing</span>'}</span>
+                <span class="flex gap-2"><button onclick="openNewAbxModal('${a.id}','${x.id}')" title="Edit" class="text-slate-300 hover:text-medical-600"><i class="fa-solid fa-pen"></i></button>
+                <button onclick="deleteAbx('${a.id}','${x.id}')" class="text-slate-300 hover:text-red-500"><i class="fa-solid fa-xmark"></i></button></span></div>
+              ${ds.map(d => `<div class="text-slate-600 mt-1">${esc(d.name)}: ${esc(d.dose) || '—'} · ${esc(d.route)}</div>`).join('')}
+              <div class="text-slate-500 mt-1">${fmt(x.start)} → ${x.stop ? fmt(x.stop) : 'ongoing'}${abxDays(x) ? ` · <strong>${x.stop ? '' : 'Day '}${abxDays(x)}${x.stop ? ' days' : ''}</strong>` : ''}</div>            </div>`; }), 'No antibiotics yet.') || abxHint(a)}</div>
+        </div>
+      </div>
+      <div class="px-5 pb-5">
+        <div class="flex justify-between items-center mb-2">
+          ${secHead(a.id, 'ops', 'text-rose-700', 'fa-kit-medical', 'Operations / procedures', (a.operations || []).length)}
+          <button onclick="openOperationModal('${a.id}')" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 px-2.5 py-1 rounded-lg font-semibold">+ Add</button>
+        </div>
+        <div class="space-y-2">${listHtml(a.id, 'ops', (a.operations || []).map(o => `
+          <div class="border border-slate-100 rounded-xl p-3 text-xs">
+            <div class="flex justify-between gap-2"><span class="font-semibold text-sm">${esc(o.name)}</span>
+              <span class="flex gap-2"><button onclick="openOperationModal('${a.id}','${o.id}')" title="Edit" class="text-slate-300 hover:text-medical-600"><i class="fa-solid fa-pen"></i></button>
+              <button onclick="deleteOperation('${a.id}','${o.id}')" class="text-slate-300 hover:text-red-500"><i class="fa-solid fa-xmark"></i></button></span></div>
+            <div class="text-slate-500 mt-1">${fmt(o.date)}</div>
+          </div>`), 'No operations recorded.')}</div>
+      </div>
+      <div class="px-5 pb-5">
+        <div class="flex justify-between items-center mb-2">
+          ${secHead(a.id, 'lines', 'text-violet-700', 'fa-syringe', 'Lines / devices', (a.lines || []).length)}
+          <button onclick="openLineModal('${a.id}')" class="text-xs bg-violet-50 hover:bg-violet-100 text-violet-700 px-2.5 py-1 rounded-lg font-semibold">+ Add</button>
+        </div>
+        <div class="space-y-2">${listHtml(a.id, 'lines', (a.lines || []).map(l => `
+          <div class="border border-slate-100 rounded-xl p-3 text-xs">
+            <div class="flex justify-between gap-2"><span class="font-semibold text-sm">${esc(l.type)}${l.site ? ` <span class="font-normal text-slate-500">· ${esc(l.site)}</span>` : ''}</span>
+              <span class="flex gap-2"><button onclick="openLineModal('${a.id}','${l.id}')" title="Edit" class="text-slate-300 hover:text-medical-600"><i class="fa-solid fa-pen"></i></button>
+              <button onclick="deleteLine('${a.id}','${l.id}')" class="text-slate-300 hover:text-red-500"><i class="fa-solid fa-xmark"></i></button></span></div>
+            <div class="text-slate-500 mt-1">${fmt(l.inserted)} → ${l.removed ? fmt(l.removed) : '<span class="text-orange-600 font-semibold">still in place</span>'}${lineDays(l) ? ` · <strong>${l.removed ? lineDays(l) + ' days' : 'Day ' + lineDays(l)}</strong>` : ''}</div>
+          </div>`), 'No lines / devices recorded.')}</div>
+      </div>
+    </div>`).join('');
+}
+
+function renderAll() {
+  migratePlaces(); stopAbxOnDeath();
+  document.getElementById('totalPatientsCount').textContent = patients.length;
+  document.getElementById('totalAdmissionsCount').textContent = patients.reduce((s, p) => s + p.admissions.length, 0);
+  updateClusterBadge();
+  renderPatientsList();
+  const p = cur();
+  document.getElementById('noPatientSelected').classList.toggle('hidden', !!p);
+  document.getElementById('patientProfileCard').classList.toggle('hidden', !p);
+  if (!p) return;
+  document.getElementById('viewPatientName').textContent = p.name;
+  document.getElementById('viewPatientId').textContent = 'MRN: ' + p.patientId;
+  document.getElementById('viewPatientHistory').textContent = p.history || 'Not recorded';
+  const ageEl = document.getElementById('viewPatientAge'), ag = ageOf(p.dob);
+  ageEl.classList.toggle('hidden', !ag);
+  ageEl.innerHTML = ag ? `<i class="fa-solid fa-cake-candles mr-1"></i>${ag} · ${fmt(p.dob)}` : '';
+  renderAdmissions(p);
+}
+
+/* ---------- Report ---------- */
+function openReport() {
+  const p = cur(); if (!p) return;
+  const sel = document.getElementById('reportScope');
+  sel.innerHTML = '<option value="all">All admissions</option>' + p.admissions.map((a, i) => `<option value="${i}">Admission #${i + 1} (${fmt(a.date)})</option>`).join('');
+  renderReport(); openModal('reportModal');
+}
+function resistanceSummary(p) {
+  const map = new Map();
+  p.admissions.forEach((a, i) => a.cultures.forEach(c => orgsOf(c).forEach(o => {
+    if (!o.name || o.type === 'No growth' || o.name === 'No growth') return;
+    const key = o.name + '|' + (o.phenotype || '');
+    if (!map.has(key)) map.set(key, { name: o.name, pheno: o.phenotype || '—', adms: new Set() });
+    map.get(key).adms.add(i + 1);
+  })));
+  if (!map.size) return '';
+  const th = 'border border-slate-400 px-2 py-1 text-left bg-slate-100 font-semibold';
+  const td = 'border border-slate-400 px-2 py-1';
+  return `<div class="rep-block mb-6"><h2 class="text-base font-bold mb-2">Resistance summary</h2>
+    <table class="w-full border-collapse text-xs"><thead><tr><th class="${th}">Organism</th><th class="${th}">Resistance pattern</th><th class="${th}">Admission(s)</th></tr></thead><tbody>
+    ${[...map.values()].map(r => `<tr><td class="${td} italic">${esc(r.name)}</td><td class="${td}">${esc(r.pheno)}</td><td class="${td}">#${[...r.adms].join(', #')}</td></tr>`).join('')}
+    </tbody></table></div>`;
+}
+function renderReport() {
+  const p = cur(); if (!p) return;
+  const scope = document.getElementById('reportScope').value;
+  const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+  const th = 'border border-slate-400 px-2 py-1 text-left bg-slate-100 font-semibold';
+  const td = 'border border-slate-400 px-2 py-1 align-top';
+  const admHtml = p.admissions.length ? p.admissions.map((a, i) => ({ a, i })).filter(x => scope === 'all' || String(x.i) === scope).map(({ a, i }) => `
+    <div class="rep-block mb-6">
+      <div class="bg-slate-100 border border-slate-400 px-3 py-2 font-bold">Admission #${i + 1}${i > 0 ? ' (re-admission)' : ''}: ${fmt(a.date)}</div>
+      <p class="px-1 pt-2"><strong>Outcome:</strong> ${a.discharge ? outcomeWord(a) + ' on ' + stayText(a) : 'Still admitted'}</p>
+      <p class="px-1 pt-1"><strong>Department(s):</strong> ${deptText(a)}</p>
+      ${a.diagnosis ? `<p class="px-1 pt-2"><strong>Diagnosis:</strong> ${esc(a.diagnosis)}</p>` : ''}
+      <p class="px-1 py-1"><strong>Reason for admission:</strong> ${esc(a.reason)}</p>
+      ${opsReport(a)}
+      <p class="font-semibold mt-2 mb-1">Microbiology cultures</p>
+      ${a.cultures.length ? `<table class="w-full border-collapse text-xs mb-3"><thead><tr>
+        <th class="${th}">Drawn</th><th class="${th}">Specimen</th><th class="${th}">Organism</th><th class="${th}">Resistance pattern</th></tr></thead><tbody>
+        ${a.cultures.map(c => `<tr><td class="${td}">${fmt(c.drawn)}</td><td class="${td}">${esc(c.specimen) || '—'}</td>
+          <td class="${td}">${orgsOf(c).map(o => `<span class="italic">${esc(o.name)}</span> <span class="text-slate-500">(${esc(o.type)})</span>`).join('<br>')}</td>
+          <td class="${td}">${orgsOf(c).map(o => esc(o.phenotype) || '—').join('<br>')}</td></tr>`).join('')}
+        </tbody></table>` : '<p class="text-xs text-slate-500 mb-3">No cultures recorded.</p>'}
+      <p class="font-semibold mb-1">Antibiotic plan</p>
+      ${a.abx.length ? `<table class="w-full border-collapse text-xs"><thead><tr>
+        <th class="${th}">Regimen</th><th class="${th}">Dose / route</th><th class="${th}">Start</th><th class="${th}">Stop</th><th class="${th}">Duration</th></tr></thead><tbody>
+        ${a.abx.map(x => { const ds = drugsOf(x); return `<tr><td class="${td} font-semibold">${esc(regimenName(x))}${ds.length > 1 ? '<br><span class="font-normal text-slate-500">(combination)</span>' : ''}</td>
+          <td class="${td}">${ds.map(d => `${esc(d.name)}: ${esc(d.dose) || '—'} (${esc(d.route)})`).join('<br>')}</td>
+          <td class="${td}">${fmt(x.start)}</td><td class="${td}">${x.stop ? fmt(x.stop) : 'Ongoing'}</td><td class="${td}">${abxDays(x) ? abxDays(x) + ' day' + (abxDays(x) === 1 ? '' : 's') + (x.stop ? '' : ' (so far)') : '—'}</td></tr>`; }).join('')}
+        </tbody></table>` : '<p class="text-xs text-slate-500">No antibiotics recorded.</p>'}
+    </div>`).join('') : '<p class="text-slate-500">No admissions recorded.</p>';
+
+  document.getElementById('reportContent').innerHTML = `
+    <div class="border-b-2 border-slate-800 pb-3 mb-5 flex justify-between items-end">
+      <div><h1 class="text-2xl font-bold">Medical Assessment & Microbiology Report</h1>
+        <p class="text-slate-600 text-xs mt-1">Patient clinical record</p></div>
+      <p class="text-xs text-slate-600">Printed: ${today}</p>
+    </div>
+    <div class="rep-block grid grid-cols-2 gap-x-6 gap-y-1 mb-6 border border-slate-400 p-3">
+      <p><strong>Patient name:</strong> ${esc(p.name)}</p>
+      <p><strong>Medical record no.:</strong> ${esc(p.patientId)}</p>
+      ${p.dob ? `<p><strong>Date of birth:</strong> ${fmt(p.dob)}</p><p><strong>Age:</strong> ${ageOf(p.dob)}</p>` : ''}
+      <p class="col-span-2"><strong>Medical history:</strong> ${esc(p.history) || 'Not recorded'}</p>
+      <p><strong>Total admissions:</strong> ${p.admissions.length}</p>
+    </div>
+    ${scope === 'all' ? resistanceSummary(p) : ''}
+    <h2 class="text-base font-bold mb-3">Admissions, cultures & antibiotic therapy</h2>
+    ${admHtml}`;
+}
+
+
+/* ---------- Possible transmission: same germ, same unit, close dates ---------- */
+function dayNum(d) { return Math.floor(new Date(d + 'T00:00:00Z').getTime() / 86400000); }
+function unitAt(a, date) {   // the unit the patient was in on a given date (admission unit, then each transfer)
+  const steps = deptSteps(a).filter(s => s.d).sort((x, y) => (x.date || '').localeCompare(y.date || ''));
+  if (!steps.length) return '';
+  let u = steps[0].d;
+  steps.forEach(s => { if (s.date && date && s.date <= date) u = s.d; });
+  return u;
+}
+function svAt(a, date) {   // the specialty on a given date (latest one recorded up to then)
+  const steps = deptSteps(a).filter(x => x.d).sort((x, y) => (x.date || '').localeCompare(y.date || ''));
+  let sv = '';
+  steps.forEach(x => { if (x.sv && (!date || !x.date || x.date <= date)) sv = x.sv; });
+  return sv || (steps.find(x => x.sv) || {}).sv || '';
+}
+function normUnit(u) { return String(u || '').toLowerCase().replace(/[^a-z0-9؀-ۿ]/g, ''); }
+function orgTokens(n) { return String(n || '').toLowerCase().replace(/[^a-z\s-]/g, ' ').split(/\s+/).filter(Boolean); }
+function sameOrg(a, b) {   // same genus (and same species when both are given); tolerates short forms like "Acineto."
+  const x = orgTokens(a), y = orgTokens(b);
+  if (!x.length || !y.length) return false;
+  const g1 = x[0], g2 = y[0];
+  if (!(g1 === g2 || (Math.min(g1.length, g2.length) >= 5 && (g1.startsWith(g2) || g2.startsWith(g1))))) return false;
+  const sp = t => (t && !['spp', 'sp'].includes(t)) ? t : '';
+  const s1 = sp(x[1]), s2 = sp(y[1]);
+  return !s1 || !s2 || s1 === s2;
+}
+function cultureEvents(mode) {
+  const ev = [];
+  patients.forEach(p => p.admissions.forEach((a, ai) => a.cultures.forEach(c => orgsOf(c).forEach(o => {
+    if (!o.name || o.type === 'No growth' || /^no growth/i.test(o.name) || !c.drawn) return;
+    ev.push({ pid: p.id, name: p.name, mrn: p.patientId, adm: ai + 1, date: c.drawn, specimen: c.specimen || '', org: o.name, type: o.type, pheno: o.phenotype || '', unit: mode === 'now' ? listLocation(p, patientStatus(p)).unit : unitAt(a, c.drawn), sv: svAt(a, c.drawn) });
+  }))));
+  return ev;
+}
+function computeClusters(windowDays, samePattern, mode, from, to) {
+  const ev = cultureEvents(mode).filter(e => (!from || e.date >= from) && (!to || e.date <= to)), parent = ev.map((_, i) => i);
+  const find = i => parent[i] === i ? i : (parent[i] = find(parent[i]));
+  for (let i = 0; i < ev.length; i++) for (let j = i + 1; j < ev.length; j++) {
+    const a = ev[i], b = ev[j];
+    if (a.pid === b.pid) continue;
+    if (!normUnit(a.unit) || normUnit(a.unit) !== normUnit(b.unit)) continue;
+    if (Math.abs(dayNum(a.date) - dayNum(b.date)) > windowDays) continue;
+    if (!sameOrg(a.org, b.org)) continue;
+    if (samePattern && !(a.pheno && a.pheno === b.pheno)) continue;
+    parent[find(i)] = find(j);
+  }
+  const groups = new Map();
+  ev.forEach((e, i) => { const r = find(i); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(e); });
+  return [...groups.values()].filter(g => new Set(g.map(e => e.pid)).size >= 2).map(g => {
+    g.sort((x, y) => x.date.localeCompare(y.date));
+    const phs = g.map(e => e.pheno).filter(Boolean);
+    return { org: g[0].org, unit: g[0].unit, events: g, patients: new Set(g.map(e => e.pid)).size, same: phs.length >= 2 && phs.every(x => x === phs[0]) };
+  }).sort((x, y) => y.patients - x.patients || x.events[0].date.localeCompare(y.events[0].date));
+}
+function updateClusterBadge() {
+  const n = computeClusters(14, false).length, el = document.getElementById('clusterBadge');
+  if (!el) return;
+  el.textContent = n; el.classList.toggle('hidden', !n);
+}
+function openClusters() { renderClusters(); openModal('modalClusters'); }
+function clusterPickMonth() {   // a month fills the From / To dates (cultures drawn in that month)
+  const m = document.getElementById('clusterMonth').value; if (!m) return;
+  const [y, mo] = m.split('-').map(Number), last = new Date(Date.UTC(y, mo, 0)).getUTCDate(), pad = n => String(n).padStart(2, '0');
+  document.getElementById('clusterFrom').value = `${y}-${pad(mo)}-01`;
+  document.getElementById('clusterTo').value = `${y}-${pad(mo)}-${pad(last)}`;
+  renderClusters();
+}
+function clusterRangeChanged() { document.getElementById('clusterMonth').value = ''; renderClusters(); }
+function clusterClearRange() { ['clusterMonth', 'clusterFrom', 'clusterTo'].forEach(i => document.getElementById(i).value = ''); renderClusters(); }
+function renderClusters() {
+  fillUnitSelect('clusterUnit');
+  const w = +document.getElementById('clusterWindow').value, sp = document.getElementById('clusterSamePattern').checked, mode = document.getElementById('clusterMode').value, from = document.getElementById('clusterFrom').value, to = document.getElementById('clusterTo').value, cu = document.getElementById('clusterUnit').value;
+  const cl = computeClusters(w, sp, mode, from, to).filter(c => !cu || normUnit(c.unit) === normUnit(cu))
+    .sort((x, y) => String(x.unit).localeCompare(String(y.unit), undefined, { numeric: true }) || y.patients - x.patients);
+  let lastUnit = null;
+  document.getElementById('clusterResults').innerHTML = cl.length ? cl.map(c => {
+    const head = normUnit(c.unit) !== lastUnit ? `<h4 class="text-sm font-bold text-slate-700 pt-1"><i class="fa-solid fa-hospital mr-1 text-rose-600"></i>${esc(c.unit)}</h4>` : '';
+    lastUnit = normUnit(c.unit);
+    const byP = new Map();
+    c.events.forEach(e => { if (!byP.has(e.pid)) byP.set(e.pid, []); byP.get(e.pid).push(e); });
+    return head + `<div class="border ${c.same ? 'border-red-300 bg-red-50' : 'border-amber-300 bg-amber-50'} rounded-xl p-4">
+      <div class="flex flex-wrap items-center gap-2 mb-1">
+        <span class="font-bold italic">${esc(c.org)}</span>
+        <span class="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700"><i class="fa-solid fa-hospital mr-1"></i>${esc(c.unit)}</span>
+        <span class="text-[11px] font-semibold px-2 py-0.5 rounded-md ${c.same ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-amber-100 text-amber-800 border border-amber-300'}">${c.same ? 'Same resistance pattern' : 'Pattern differs or not recorded'}</span>
+        <span class="text-xs text-slate-500">${c.patients} patients</span>
+      </div>
+      ${[...byP.values()].map(list => `<div class="flex justify-between gap-3 py-1.5 border-t border-white/70 text-xs">
+        <button onclick="openPatientFromCluster('${list[0].pid}')" class="font-semibold text-medical-700 hover:underline text-left">${esc(list[0].name)} <span class="font-normal text-slate-400">MRN ${esc(list[0].mrn)}</span></button>
+        <span class="text-slate-600 text-right">${list.map(e => `${fmt(e.date)} · ${esc(e.specimen) || '—'}${e.pheno ? ' · ' + esc(e.pheno) : ''}`).join('<br>')}</span></div>`).join('')}
+    </div>`;
+  }).join('') : `<p class="text-sm text-slate-400 text-center py-6">No possible clusters found with these settings.${(() => { const n = cultureEvents(mode).filter(e => !normUnit(e.unit)).length; return n ? '<br>' + n + ' culture result(s) have no unit recorded, so they cannot be matched.' : ''; })()}</p>`;
+}
+function openPatientFromCluster(id) { closeModal('modalClusters'); selectedId = null; selectPatient(id); }
+
+/* ---------- Excel export (a real .xlsx with several tabs, built here without any library) ---------- */
+const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function zipStore(files) {
+  const enc = new TextEncoder(), parts = [], central = []; let offset = 0;
+  files.forEach(f => {
+    const name = enc.encode(f.name), data = enc.encode(f.text), crc = crc32(data), size = data.length;
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(12, 0x21, true);
+    lh.setUint32(14, crc, true); lh.setUint32(18, size, true); lh.setUint32(22, size, true); lh.setUint16(26, name.length, true);
+    parts.push(new Uint8Array(lh.buffer), name, data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(14, 0x21, true);
+    ch.setUint32(16, crc, true); ch.setUint32(20, size, true); ch.setUint32(24, size, true); ch.setUint16(28, name.length, true); ch.setUint32(42, offset, true);
+    central.push(new Uint8Array(ch.buffer), name);
+    offset += 30 + name.length + size;
+  });
+  const cdSize = central.reduce((s, x) => s + x.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true); end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+function xlEsc(s) { return String(s ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function xlCol(n) { let s = ''; n++; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }
+const D = s => s ? { d: s } : '';   // a real Excel date cell
+function sheetXml(rows, widths) {
+  let x = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/>';
+  x += '<cols>' + widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('') + '</cols><sheetData>';
+  rows.forEach((r, ri) => {
+    x += `<row r="${ri + 1}">`;
+    r.forEach((v, ci) => {
+      if (v === '' || v == null) return;
+      const ref = xlCol(ci) + (ri + 1);
+      if (ri === 0) x += `<c r="${ref}" s="1" t="inlineStr"><is><t>${xlEsc(v)}</t></is></c>`;
+      else if (typeof v === 'number') x += `<c r="${ref}"><v>${v}</v></c>`;
+      else if (typeof v === 'object') x += `<c r="${ref}" s="2"><v>${dayNum(v.d) + 25569}</v></c>`;
+      else x += `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${xlEsc(v)}</t></is></c>`;
+    });
+    x += '</row>';
+  });
+  return x + `</sheetData><autoFilter ref="A1:${xlCol(rows[0].length - 1)}${rows.length}"/></worksheet>`;
+}
+function buildTables() {
+  const today = new Date().toISOString().slice(0, 10);
+  const P = [['Patient', 'MRN', 'Age', 'Date of birth', 'Admission #', 'Admission date', 'Status', 'Discharge / death date', 'Hospital days', 'Diagnosis', 'Reason for admission', 'Current unit', 'Current specialty', 'Units (path)', 'Ongoing antibiotics', 'Lines in place', 'Operations', 'Last culture']];
+  const C = [['Patient', 'MRN', 'Admission #', 'Culture date', 'Hospital day', 'Onset', 'Specimen', 'Unit at culture', 'Specialty', 'Organism', 'Gram / type', 'Resistance pattern']];
+  const A = [['Patient', 'MRN', 'Admission #', 'Antibiotic', 'Dose', 'Route', 'Start', 'Stop', 'Days', 'Status', 'In a combination?']];
+  const L = [['Patient', 'MRN', 'Admission #', 'Line / device', 'Site', 'Inserted', 'Removed', 'Days', 'Status']];
+  patients.forEach(p => p.admissions.forEach((a, i) => {
+    const steps = deptSteps(a), admitted = !a.discharge;
+    const lastC = [...a.cultures].sort((x, y) => (y.drawn || '').localeCompare(x.drawn || ''))[0];
+    P.push([p.name, p.patientId, ageOf(p.dob), D(p.dob), i + 1, D(a.date), admitted ? 'Admitted' : outcomeWord(a), D(a.discharge),
+      dayNum(a.discharge || today) - dayNum(a.date) + 1, a.diagnosis, a.reason, steps.length ? steps[steps.length - 1].d : '', svAt(a, a.discharge || today),
+      steps.map(s => `${s.d}${s.sv ? ' [' + s.sv + ']' : ''} (${fmt(s.date)})`).join(' > '),
+      admitted ? ongoingAbx(a).map(x => regimenName(x)).join(', ') : '',
+      admitted ? (a.lines || []).filter(l => !l.removed).map(l => `${l.type}${lineDays(l) ? ' (day ' + lineDays(l) + ')' : ''}`).join(', ') : '',
+      (a.operations || []).map(o => `${o.name}${o.date ? ' (' + fmt(o.date) + ')' : ''}`).join(', '),
+      lastC ? `${fmt(lastC.drawn)} ${lastC.specimen || ''}: ${orgsOf(lastC).map(o => o.name + (o.phenotype ? ' (' + o.phenotype + ')' : '')).join(' + ')}` : '']);
+    a.cultures.forEach(c => orgsOf(c).forEach(o => {
+      const hd = c.drawn ? dayNum(c.drawn) - dayNum(a.date) + 1 : '';
+      C.push([p.name, p.patientId, i + 1, D(c.drawn), hd, hd === '' ? '' : (hd <= 2 ? 'Community-onset' : 'Hospital-onset'), c.specimen || '', unitAt(a, c.drawn), svAt(a, c.drawn), o.name, o.type, o.phenotype || '']);
+    }));
+    a.abx.forEach(x => drugsOf(x).forEach(d => A.push([p.name, p.patientId, i + 1, d.name, d.dose || '', d.route || '', D(x.start), D(x.stop), abxDays(x), x.stop ? 'Stopped' : 'Ongoing', drugsOf(x).length > 1 ? 'Yes' : 'No'])));
+    (a.lines || []).forEach(l => L.push([p.name, p.patientId, i + 1, l.type, l.site || '', D(l.inserted), D(l.removed), lineDays(l), l.removed ? 'Removed' : 'In place']));
+  }));
+  const K = [['Cluster', 'Organism', 'Unit', 'Specialty', 'Same resistance pattern?', 'Patient', 'MRN', 'Culture date', 'Specimen', 'Resistance pattern']];
+  computeClusters(14, false).forEach((c, ci) => c.events.forEach(e => K.push([ci + 1, c.org, c.unit, e.sv, c.same ? 'Yes' : 'No / not recorded', e.name, e.mrn, D(e.date), e.specimen, e.pheno])));
+  return [
+    ['Patients', P, [22, 14, 8, 13, 11, 14, 11, 16, 9, 28, 28, 16, 18, 38, 26, 36, 30, 44]],
+    ['Cultures', C, [22, 14, 11, 13, 11, 16, 20, 18, 18, 30, 14, 16]],
+    ['Antibiotics', A, [22, 14, 11, 18, 12, 8, 13, 13, 7, 10, 12]],
+    ['Lines', L, [22, 14, 11, 34, 18, 13, 13, 7, 11]],
+    ['Possible clusters (14d)', K, [9, 28, 18, 18, 18, 22, 14, 13, 20, 16]]
+  ];
+}
+function exportXLSX() {
+  const tabs = buildTables(), NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main', R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const hdr = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  const files = [
+    { name: '[Content_Types].xml', text: hdr + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' + tabs.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('') + '</Types>' },
+    { name: '_rels/.rels', text: hdr + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+    { name: 'xl/workbook.xml', text: hdr + `<workbook xmlns="${NS}" xmlns:r="${R}"><bookViews><workbookView/></bookViews><sheets>` + tabs.map((t, i) => `<sheet name="${xlEsc(t[0])}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('') + '</sheets></workbook>' },
+    { name: 'xl/_rels/workbook.xml.rels', text: hdr + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + tabs.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('') + `<Relationship Id="rId${tabs.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+    { name: 'xl/styles.xml', text: hdr + `<styleSheet xmlns="${NS}"><numFmts count="1"><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF0369A1"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="left"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>` },
+    ...tabs.map((t, i) => ({ name: `xl/worksheets/sheet${i + 1}.xml`, text: sheetXml(t[1], t[2]) }))
+  ];
+  const a = document.createElement('a'); a.href = URL.createObjectURL(zipStore(files));
+  a.download = 'patients-' + new Date().toISOString().slice(0, 10) + '.xlsx'; a.click();
+}
+
+load();
+renderAll(); updateBackupBanner();
+try { window.matchMedia('(min-width:1024px)').addEventListener('change', () => renderAll()); } catch (e) {}
+try { if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js'); } catch (e) {}
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+</script>
+</body>
+</html>
