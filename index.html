@@ -172,10 +172,8 @@ tailwind.config = { theme: { extend: { fontFamily: { inter: ['Inter','sans-serif
           <input type="date" id="inputAdmissionDischarge" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"></div>
       </div>
       <p class="text-[11px] text-slate-400 -mt-2">Leave the date empty if the patient is still admitted.</p>
-      <div><label class="block text-xs font-bold mb-1">Diagnosis / disease name *</label>
-        <input id="inputAdmissionDiagnosis" required placeholder="e.g. Ventilator-associated pneumonia" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"></div>
-      <div><label class="block text-xs font-bold mb-1">Reason for admission *</label>
-        <textarea id="inputAdmissionReason" required rows="3" placeholder="e.g. Fever, respiratory distress..." class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"></textarea></div>
+      <div><label class="block text-xs font-bold mb-1">Diagnosis / reason for admission *</label>
+        <textarea id="inputAdmissionDiagnosis" required rows="3" placeholder="e.g. Ventilator-associated pneumonia - fever, respiratory distress" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"></textarea></div>
       <div><label class="block text-xs font-bold mb-1">Place / unit (where the patient is lying)</label>
         <input id="inputAdmissionDept" list="placeList" placeholder="e.g. ICU B" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"></div>
       <div><label class="block text-xs font-bold mb-1">Service / specialty (optional, not used for transmission)</label>
@@ -437,11 +435,11 @@ async function exportData() {
 }
 function exportCSV() {
   const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-  const head = ['MRN', 'Patient name', 'Date of birth', 'Age', 'Medical history', 'Admission #', 'Admission date', 'Outcome', 'Discharge/death date', 'Diagnosis', 'Reason for admission', 'Departments', 'Operations', 'Lines / devices',
+  const head = ['MRN', 'Patient name', 'Date of birth', 'Age', 'Medical history', 'Admission #', 'Admission date', 'Outcome', 'Discharge/death date', 'Diagnosis / reason for admission', 'Departments', 'Operations', 'Lines / devices',
     'Culture drawn', 'Specimen', 'Organism', 'Gram/type', 'Resistance pattern', 'Antibiotics'];
   const rows = [head];
   patients.forEach(p => p.admissions.forEach((a, i) => {
-    const base = [p.patientId, p.name, p.dob || '', ageOf(p.dob), p.history, i + 1, a.date, a.discharge ? outcomeWord(a) : 'Admitted', a.discharge || '', a.diagnosis, a.reason,
+    const base = [p.patientId, p.name, p.dob || '', ageOf(p.dob), p.history, i + 1, a.date, a.discharge ? outcomeWord(a) : 'Admitted', a.discharge || '', dxOf(a),
       deptSteps(a).map(s => `${s.d} (${s.date})`).join(' > '), (a.operations || []).map(o => `${o.name} (${o.date})`).join('; '),
       (a.lines || []).map(l => `${l.type}${l.site ? ' - ' + l.site : ''} (${l.inserted} to ${l.removed || 'in place'})`).join('; ')];
     const abx = a.abx.map(x => `${regimenName(x)} [${drugsOf(x).map(d => `${d.name} ${d.dose || ''} ${d.route || ''}`.trim()).join(' + ')}] ${x.start || ''} to ${x.stop || 'ongoing'}`).join('; ');
@@ -659,8 +657,7 @@ function openNewAdmissionModal(aid) {   // no argument = new admission; with an 
     document.getElementById('inputAdmissionDate').value = a.date || '';
     document.getElementById('inputAdmissionOutcome').value = a.outcome || 'Discharged';
     document.getElementById('inputAdmissionDischarge').value = a.discharge || '';
-    document.getElementById('inputAdmissionDiagnosis').value = a.diagnosis || '';
-    document.getElementById('inputAdmissionReason').value = a.reason || '';
+    document.getElementById('inputAdmissionDiagnosis').value = dxOf(a);
     document.getElementById('inputAdmissionDept').value = a.dept || '';
     document.getElementById('inputAdmissionService').value = a.service || '';
   } else {
@@ -669,6 +666,8 @@ function openNewAdmissionModal(aid) {   // no argument = new admission; with an 
   }
   openModal('modalNewAdmission');
 }
+// diagnosis and reason are one field now; older records may still have both, so show them together
+function dxOf(a) { return [a.diagnosis, a.reason].filter(Boolean).filter((x, i, arr) => arr.indexOf(x) === i).join(' — '); }
 function outcomeWord(a) { return a.outcome === 'Deceased' ? 'Deceased' : 'Discharged'; }
 function stayText(a) {
   if (!a.discharge) return null;
@@ -699,7 +698,7 @@ function saveNewAdmission(e) {
     discharge: dis,
     outcome: document.getElementById('inputAdmissionOutcome').value,
     diagnosis: document.getElementById('inputAdmissionDiagnosis').value.trim(),
-    reason: document.getElementById('inputAdmissionReason').value.trim(),
+    reason: '',
     dept: document.getElementById('inputAdmissionDept').value.trim(),
     service: document.getElementById('inputAdmissionService').value.trim() };
   const eid = document.getElementById('editingAdmissionId').value;
@@ -1120,8 +1119,7 @@ function renderAdmissions(p) {
           <div class="font-bold text-medical-700"><i class="fa-solid fa-calendar-day mr-1"></i>Admission #${n}${n > 1 ? ' <span class="text-[11px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-md ml-1">Re-admission</span>' : ''} · ${fmt(a.date)}</div>
           <div class="text-xs mt-1">${a.discharge ? (a.outcome === 'Deceased' ? `<span class="text-red-700 font-semibold"><i class="fa-solid fa-heart-crack mr-1"></i>Deceased ${stayText(a)}</span>` : `<span class="text-emerald-700 font-semibold"><i class="fa-solid fa-person-walking-arrow-right mr-1"></i>Discharged ${stayText(a)}</span>`) : '<span class="text-orange-600 font-semibold"><i class="fa-solid fa-bed-pulse mr-1"></i>Currently admitted</span>'}</div>
           <div class="text-xs text-slate-600 mt-1">${deptHtml(a)}</div>
-          ${a.diagnosis ? `<div class="text-sm font-semibold text-slate-800 mt-1">Diagnosis: ${esc(a.diagnosis)}</div>` : ''}
-          <div class="text-xs text-slate-600 mt-1">Reason: ${esc(a.reason)}</div>
+          ${dxOf(a) ? `<div class="text-sm font-semibold text-slate-800 mt-1">${esc(dxOf(a))}</div>` : ''}
         </div>
         <div class="flex items-center gap-2">
           <button onclick="openNewAdmissionModal('${a.id}')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg font-semibold"><i class="fa-solid fa-pen mr-1"></i>Edit</button>
@@ -1242,8 +1240,7 @@ function renderReport() {
       <div class="bg-slate-100 border border-slate-400 px-3 py-2 font-bold">Admission #${i + 1}${i > 0 ? ' (re-admission)' : ''}: ${fmt(a.date)}</div>
       <p class="px-1 pt-2"><strong>Outcome:</strong> ${a.discharge ? outcomeWord(a) + ' on ' + stayText(a) : 'Still admitted'}</p>
       <p class="px-1 pt-1"><strong>Department(s):</strong> ${deptText(a)}</p>
-      ${a.diagnosis ? `<p class="px-1 pt-2"><strong>Diagnosis:</strong> ${esc(a.diagnosis)}</p>` : ''}
-      <p class="px-1 py-1"><strong>Reason for admission:</strong> ${esc(a.reason)}</p>
+      <p class="px-1 pt-2 pb-1"><strong>Diagnosis / reason for admission:</strong> ${esc(dxOf(a)) || 'Not recorded'}</p>
       ${opsReport(a)}
       <p class="font-semibold mt-2 mb-1">Microbiology cultures</p>
       ${a.cultures.length ? `<table class="w-full border-collapse text-xs mb-3"><thead><tr>
@@ -1419,7 +1416,7 @@ function sheetXml(rows, widths) {
 }
 function buildTables() {
   const today = new Date().toISOString().slice(0, 10);
-  const P = [['Patient', 'MRN', 'Age', 'Date of birth', 'Admission #', 'Admission date', 'Status', 'Discharge / death date', 'Hospital days', 'Diagnosis', 'Reason for admission', 'Current unit', 'Current specialty', 'Units (path)', 'Ongoing antibiotics', 'Lines in place', 'Operations', 'Last culture']];
+  const P = [['Patient', 'MRN', 'Age', 'Date of birth', 'Admission #', 'Admission date', 'Status', 'Discharge / death date', 'Hospital days', 'Diagnosis / reason for admission', 'Current unit', 'Current specialty', 'Units (path)', 'Ongoing antibiotics', 'Lines in place', 'Operations', 'Last culture']];
   const C = [['Patient', 'MRN', 'Admission #', 'Culture date', 'Hospital day', 'Onset', 'Specimen', 'Unit at culture', 'Specialty', 'Organism', 'Gram / type', 'Resistance pattern']];
   const A = [['Patient', 'MRN', 'Admission #', 'Antibiotic', 'Dose', 'Route', 'Start', 'Stop', 'Days', 'Status', 'In a combination?']];
   const L = [['Patient', 'MRN', 'Admission #', 'Line / device', 'Site', 'Inserted', 'Removed', 'Days', 'Status']];
@@ -1427,7 +1424,7 @@ function buildTables() {
     const steps = deptSteps(a), admitted = !a.discharge;
     const lastC = [...a.cultures].sort((x, y) => (y.drawn || '').localeCompare(x.drawn || ''))[0];
     P.push([p.name, p.patientId, ageOf(p.dob), D(p.dob), i + 1, D(a.date), admitted ? 'Admitted' : outcomeWord(a), D(a.discharge),
-      dayNum(a.discharge || today) - dayNum(a.date) + 1, a.diagnosis, a.reason, steps.length ? steps[steps.length - 1].d : '', svAt(a, a.discharge || today),
+      dayNum(a.discharge || today) - dayNum(a.date) + 1, dxOf(a), steps.length ? steps[steps.length - 1].d : '', svAt(a, a.discharge || today),
       steps.map(s => `${s.d}${s.sv ? ' [' + s.sv + ']' : ''} (${fmt(s.date)})`).join(' > '),
       admitted ? ongoingAbx(a).map(x => regimenName(x)).join(', ') : '',
       admitted ? (a.lines || []).filter(l => !l.removed).map(l => `${l.type}${lineDays(l) ? ' (day ' + lineDays(l) + ')' : ''}`).join(', ') : '',
@@ -1443,7 +1440,7 @@ function buildTables() {
   const K = [['Cluster', 'Organism', 'Unit', 'Specialty', 'Same resistance pattern?', 'Patient', 'MRN', 'Culture date', 'Specimen', 'Resistance pattern']];
   computeClusters(14, false).forEach((c, ci) => c.events.forEach(e => K.push([ci + 1, c.org, c.unit, e.sv, c.same ? 'Yes' : 'No / not recorded', e.name, e.mrn, D(e.date), e.specimen, e.pheno])));
   return [
-    ['Patients', P, [22, 14, 8, 13, 11, 14, 11, 16, 9, 28, 28, 16, 18, 38, 26, 36, 30, 44]],
+    ['Patients', P, [22, 14, 8, 13, 11, 14, 11, 16, 9, 40, 16, 18, 38, 26, 36, 30, 44]],
     ['Cultures', C, [22, 14, 11, 13, 11, 16, 20, 18, 18, 30, 14, 16]],
     ['Antibiotics', A, [22, 14, 11, 18, 12, 8, 13, 13, 7, 10, 12]],
     ['Lines', L, [22, 14, 11, 34, 18, 13, 13, 7, 11]],
