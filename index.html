@@ -200,18 +200,8 @@ tailwind.config = { theme: { extend: { fontFamily: { inter: ['Inter','sans-serif
       <input type="hidden" id="targetAdmissionIdForCulture"><input type="hidden" id="editingCultureId">
       <div><label class="block text-xs font-bold mb-1">Date drawn *</label>
         <input type="date" id="inputCultureDrawn" required class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none"></div>
-      <div><label class="block text-xs font-bold mb-1">Specimen</label>
-        <select id="inputCultureSpecimen" onchange="document.getElementById('inputCultureSpecimenOther').classList.toggle('hidden', this.value !== 'Other')" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none">
-          <option>Blood</option><option>Urine</option><option>Sputum</option><option>Endotracheal aspirate</option><option>Wound swab</option><option>CSF</option><option>Catheter tip</option><option>Stool</option><option>Other</option>
-        </select>
-        <input id="inputCultureSpecimenOther" class="hidden mt-2 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none" placeholder="Type where the sample was taken from (e.g. Pleural fluid)"></div>
-      <div>
-        <div class="flex justify-between items-center mb-1">
-          <label class="block text-xs font-bold">Organism(s) *</label>
-          <button type="button" onclick="addOrgRow()" class="text-xs bg-amber-50 hover:bg-amber-100 text-amber-700 px-2.5 py-1 rounded-lg font-semibold">+ Add another organism</button>
-        </div>
-        <div id="cultureOrgRows" class="space-y-3"></div>
-      </div>
+      <div id="cultureSpecimenBlocks" class="space-y-4"></div>
+      <button type="button" id="btnAddSpecimen" onclick="addSpecimenBlock()" class="w-full text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 border border-dashed border-amber-300 px-3 py-2 rounded-xl font-semibold"><i class="fa-solid fa-plus mr-1"></i>Add another specimen taken on the same date (e.g. Urine)</button>
       <div class="flex justify-end gap-2 pt-2">
         <button type="button" onclick="closeModal('modalNewCulture')" class="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600">Cancel</button>
         <button class="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold">Save culture</button>
@@ -892,7 +882,7 @@ function orgNameOf(row) {
   const v = row.querySelector('.org-select').value;
   return v === '__other' ? row.querySelector('.org-other').value.trim() : v;
 }
-function addOrgRow() {
+function addOrgRow(container) {
   const row = document.createElement('div');
   row.className = 'org-row border border-slate-200 rounded-xl p-3 space-y-2 bg-slate-50';
   row.innerHTML = `
@@ -914,28 +904,73 @@ function addOrgRow() {
         <option value="">— Resistance pattern —</option><option>Pan-sensitive</option><option>ESBL</option><option>CRE / CRKP</option><option>CRAB</option><option>MRSA</option><option>VRE</option><option>MDR</option><option>XDR</option><option>PDR</option><option>Other</option>
       </select>
     </div>`;
-  document.getElementById('cultureOrgRows').appendChild(row);
+  container.appendChild(row);
 }
 function removeOrgRow(btn) {
-  if (document.querySelectorAll('#cultureOrgRows .org-row').length > 1) btn.closest('.org-row').remove();
+  const box = btn.closest('.org-rows');
+  if (box.querySelectorAll('.org-row').length > 1) btn.closest('.org-row').remove();
 }
 const SPECIMENS = ['Blood', 'Urine', 'Sputum', 'Endotracheal aspirate', 'Wound swab', 'CSF', 'Catheter tip', 'Stool'];
+function addSpecimenBlock(preset) {
+  const box = document.getElementById('cultureSpecimenBlocks');
+  const used = [...box.querySelectorAll('.sp-select')].map(x => x.value);
+  const blk = document.createElement('div');
+  blk.className = 'sp-block border border-amber-200 rounded-xl p-3 space-y-3 bg-amber-50/40';
+  blk.innerHTML = `
+    <div>
+      <div class="flex justify-between items-center mb-1">
+        <label class="block text-xs font-bold">Specimen</label>
+        <button type="button" onclick="removeSpecimenBlock(this)" title="Remove this specimen" class="sp-remove text-slate-400 hover:text-red-500 text-xs"><i class="fa-solid fa-xmark mr-1"></i>Remove</button>
+      </div>
+      <select class="sp-select w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none" onchange="this.closest('.sp-block').querySelector('.sp-other').classList.toggle('hidden', this.value !== 'Other')">
+        ${SPECIMENS.map(x => `<option>${x}</option>`).join('')}<option>Other</option>
+      </select>
+      <input class="sp-other hidden mt-2 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none" placeholder="Type where the sample was taken from (e.g. Pleural fluid)">
+    </div>
+    <div>
+      <div class="flex justify-between items-center mb-1">
+        <label class="block text-xs font-bold">Organism(s) *</label>
+        <button type="button" onclick="addOrgRow(this.closest('.sp-block').querySelector('.org-rows'))" class="text-xs bg-amber-50 hover:bg-amber-100 text-amber-700 px-2.5 py-1 rounded-lg font-semibold">+ Add another organism</button>
+      </div>
+      <div class="org-rows space-y-3"></div>
+    </div>`;
+  box.appendChild(blk);
+  // suggest the next specimen type that is not already used on this date
+  const sel = blk.querySelector('.sp-select');
+  sel.value = preset || SPECIMENS.find(x => !used.includes(x)) || 'Blood';
+  addOrgRow(blk.querySelector('.org-rows'));
+  syncSpecimenRemove();
+  return blk;
+}
+function removeSpecimenBlock(btn) {
+  const box = document.getElementById('cultureSpecimenBlocks');
+  if (box.querySelectorAll('.sp-block').length > 1) btn.closest('.sp-block').remove();
+  syncSpecimenRemove();
+}
+function syncSpecimenRemove() {   // the "Remove" link only makes sense when there is more than one specimen
+  const blocks = document.querySelectorAll('#cultureSpecimenBlocks .sp-block');
+  blocks.forEach(b => b.querySelector('.sp-remove').classList.toggle('hidden', blocks.length < 2));
+}
 function openNewCultureModal(aid, cid) {
   document.querySelector('#modalNewCulture form').reset();
-  document.getElementById('inputCultureSpecimenOther').classList.add('hidden');
-  document.getElementById('cultureOrgRows').innerHTML = '';
+  document.getElementById('cultureSpecimenBlocks').innerHTML = '';
   document.getElementById('targetAdmissionIdForCulture').value = aid;
   document.getElementById('editingCultureId').value = cid || '';
-  document.getElementById('cultureModalTitle').textContent = cid ? 'Edit culture result' : 'Add culture result';
-  if (!cid) { addOrgRow(); openModal('modalNewCulture'); return; }
+  document.getElementById('cultureModalTitle').textContent = cid ? 'Edit culture result' : 'Add culture results';
+  document.getElementById('btnAddSpecimen').classList.toggle('hidden', !!cid);   // editing changes one specimen only
+  if (!cid) {
+    document.getElementById('inputCultureDrawn').value = new Date().toISOString().slice(0, 10);
+    addSpecimenBlock('Blood'); openModal('modalNewCulture'); return;
+  }
   const c = cur().admissions.find(x => x.id === aid).cultures.find(x => x.id === cid);
   document.getElementById('inputCultureDrawn').value = c.drawn || '';
-  const spOther = document.getElementById('inputCultureSpecimenOther');
-  if (!c.specimen || SPECIMENS.includes(c.specimen)) { document.getElementById('inputCultureSpecimen').value = c.specimen || 'Blood'; spOther.classList.add('hidden'); }
-  else { document.getElementById('inputCultureSpecimen').value = 'Other'; spOther.classList.remove('hidden'); spOther.value = c.specimen; }
+  const blk = addSpecimenBlock('Blood'), spOther = blk.querySelector('.sp-other');
+  if (!c.specimen || SPECIMENS.includes(c.specimen)) { blk.querySelector('.sp-select').value = c.specimen || 'Blood'; }
+  else { blk.querySelector('.sp-select').value = 'Other'; spOther.classList.remove('hidden'); spOther.value = c.specimen; }
+  const rows = blk.querySelector('.org-rows'); rows.innerHTML = '';
   orgsOf(c).forEach(o => {
-    addOrgRow();
-    const r = document.querySelector('#cultureOrgRows .org-row:last-child');
+    addOrgRow(rows);
+    const r = rows.lastElementChild;
     if (ORG_TYPE[o.name]) r.querySelector('.org-select').value = o.name;
     else { r.querySelector('.org-select').value = '__other'; r.querySelector('.org-other').classList.remove('hidden'); r.querySelector('.org-other').value = o.name || ''; }
     r.querySelector('.org-type').value = o.type || 'Other';
@@ -946,20 +981,23 @@ function openNewCultureModal(aid, cid) {
 function saveNewCulture(e) {
   e.preventDefault(); const p = cur();
   const a = p.admissions.find(x => x.id === document.getElementById('targetAdmissionIdForCulture').value);
-  const organisms = [...document.querySelectorAll('#cultureOrgRows .org-row')].map(r => ({
-    name: orgNameOf(r), type: r.querySelector('.org-type').value, phenotype: r.querySelector('.org-pheno').value
-  })).filter(o => o.name);
-  if (!organisms.length) { alert('Please enter at least one organism name.'); return; }
-  let specimen = document.getElementById('inputCultureSpecimen').value;
-  if (specimen === 'Other') {
-    specimen = document.getElementById('inputCultureSpecimenOther').value.trim();
-    if (!specimen) { alert('Please type where the sample was taken from.'); return; }
+  const drawn = document.getElementById('inputCultureDrawn').value;
+  const recs = [];
+  for (const blk of document.querySelectorAll('#cultureSpecimenBlocks .sp-block')) {
+    let specimen = blk.querySelector('.sp-select').value;
+    if (specimen === 'Other') {
+      specimen = blk.querySelector('.sp-other').value.trim();
+      if (!specimen) { alert('Please type where the sample was taken from.'); return; }
+    }
+    const organisms = [...blk.querySelectorAll('.org-row')].map(r => ({
+      name: orgNameOf(r), type: r.querySelector('.org-type').value, phenotype: r.querySelector('.org-pheno').value
+    })).filter(o => o.name);
+    if (!organisms.length) { alert(`Please enter at least one organism for ${specimen} (choose "No growth" if nothing grew).`); return; }
+    recs.push({ specimen, organisms });
   }
   const eid = document.getElementById('editingCultureId').value;
-  const rec = { id: eid || uid(), drawn: document.getElementById('inputCultureDrawn').value,
-    specimen,
-    organisms };
-  if (eid) a.cultures = a.cultures.map(c => c.id === eid ? rec : c); else a.cultures.push(rec);
+  if (eid) a.cultures = a.cultures.map(c => c.id === eid ? { id: eid, drawn, ...recs[0] } : c);
+  else recs.forEach(r => a.cultures.push({ id: uid(), drawn, ...r }));
   a.cultures.sort((x, y) => x.drawn.localeCompare(y.drawn));
   expandedSections.add(a.id + ':cultures');
   save(); closeModal('modalNewCulture'); renderAll();
